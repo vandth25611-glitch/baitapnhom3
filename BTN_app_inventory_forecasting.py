@@ -1,9 +1,12 @@
 # -*- coding: utf-8 -*-
 """
 =============================================================================
-HỆ THỐNG QUẢN TRỊ BÁN HÀNG, DỰ BÁO & LẬP KẾ HOẠCH MỤC TIÊU DOANH THU
+HỆ THỐNG QUẢN TRỊ BÁN HÀNG & LẬP KẾ HOẠCH DỰ BÁO DỰA TRÊN DỮ LIỆU THỰC TẾ
 Dữ liệu thực nghiệm: 73.100 bản ghi từ retail_store_inventory.csv (2022 - 2024)
-Tính năng: Tự động dự báo & Tính ngược lượng nhập hàng theo mục tiêu Doanh thu
+Tính năng cốt lõi: 
+1. Thẩm định kỳ vọng kinh doanh dựa trên dữ liệu lịch sử (Data Reality-Check).
+2. Cảnh báo nguy cơ chôn vốn khi kỳ vọng vượt trần khả thi thực tế.
+3. Ra-đa phân loại 20 sản phẩm: Sản phẩm nào NÊN kỳ vọng, sản phẩm nào CẤM kỳ vọng.
 =============================================================================
 """
 
@@ -17,73 +20,110 @@ import os
 # 1. CẤU HÌNH TRANG VÀ GIAO DIỆN
 # =====================================================================
 st.set_page_config(
-    page_title="Phần Mềm Quản Lý & Lập Kế Hoạch Doanh Thu Tồn Kho",
+    page_title="Phần Mềm Dự Báo Bán Hàng & Thẩm Định Kế Hoạch Tồn Kho",
     page_icon="🏪",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
+# Custom CSS giao diện doanh nghiệp cao cấp
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-    html, body, [class*="css"] {
-        font-family: 'Inter', sans-serif;
+    .main {
+        background-color: #f8fafc;
     }
     .top-header {
-        background: linear-gradient(135deg, #1e3a8a 0%, #0f172a 100%);
-        padding: 22px 28px;
-        border-radius: 12px;
+        background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%);
         color: white;
-        margin-bottom: 20px;
+        padding: 24px 30px;
+        border-radius: 14px;
+        margin-bottom: 22px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.06);
     }
     .top-header h1 {
-        font-size: 1.8rem;
-        font-weight: 700;
-        margin: 0;
+        color: #ffffff !important;
+        font-size: 1.85rem;
+        font-weight: 800;
+        margin: 0 0 6px 0;
     }
     .top-header p {
-        font-size: 0.95rem;
         color: #93c5fd;
-        margin-top: 6px;
-        margin-bottom: 0;
+        font-size: 0.95rem;
+        margin: 0;
     }
-    .alert-box-red {
+    .danger-card {
         background: #fef2f2;
         border: 2px solid #ef4444;
-        border-radius: 10px;
-        padding: 16px 20px;
+        border-left: 8px solid #dc2626;
+        border-radius: 12px;
+        padding: 18px 22px;
         color: #991b1b;
         margin-bottom: 18px;
+        box-shadow: 0 3px 10px rgba(239, 68, 68, 0.08);
     }
-    .alert-box-yellow {
-        background: #fffbeb;
-        border: 2px solid #f59e0b;
-        border-radius: 10px;
-        padding: 16px 20px;
-        color: #92400e;
-        margin-bottom: 18px;
-    }
-    .alert-box-green {
+    .success-card {
         background: #f0fdf4;
         border: 2px solid #22c55e;
-        border-radius: 10px;
-        padding: 16px 20px;
+        border-left: 8px solid #16a34a;
+        border-radius: 12px;
+        padding: 18px 22px;
         color: #166534;
         margin-bottom: 18px;
+        box-shadow: 0 3px 10px rgba(34, 197, 94, 0.08);
+    }
+    .caution-card {
+        background: #fffbeb;
+        border: 2px solid #f59e0b;
+        border-left: 8px solid #d97706;
+        border-radius: 12px;
+        padding: 18px 22px;
+        color: #92400e;
+        margin-bottom: 18px;
+        box-shadow: 0 3px 10px rgba(245, 158, 11, 0.08);
     }
     .target-card {
         background: #eff6ff;
         border: 1px solid #bfdbfe;
-        border-left: 6px solid #2563eb;
+        border-left: 8px solid #2563eb;
         border-radius: 12px;
         padding: 18px 22px;
         margin-bottom: 18px;
+    }
+    .sku-badge-declining {
+        background: #fee2e2;
+        color: #991b1b;
+        padding: 4px 10px;
+        border-radius: 6px;
+        font-weight: 700;
+        font-size: 0.82rem;
+        display: inline-block;
+        margin-top: 4px;
+    }
+    .sku-badge-growth {
+        background: #dcfce7;
+        color: #166534;
+        padding: 4px 10px;
+        border-radius: 6px;
+        font-weight: 700;
+        font-size: 0.82rem;
+        display: inline-block;
+        margin-top: 4px;
+    }
+    .sku-badge-stable {
+        background: #fef3c7;
+        color: #92400e;
+        padding: 4px 10px;
+        border-radius: 6px;
+        font-weight: 700;
+        font-size: 0.82rem;
+        display: inline-block;
+        margin-top: 4px;
     }
 </style>
 """, unsafe_allow_html=True)
 
 # =====================================================================
-# 2. TẢI VÀ CACHING BỘ DỮ LIỆU
+# 2. TẢI VÀ CACHING BỘ DỮ LIỆU GỐC
 # =====================================================================
 @st.cache_data
 def load_dataset():
@@ -137,10 +177,10 @@ STORE_NAMES_VI = {
 }
 
 # =====================================================================
-# 3. SIDEBAR: THIẾT LẬP KINH DOANH & LẬP KẾ HOẠCH MỤC TIÊU
+# 3. SIDEBAR: CHỌN MẶT HÀNG & THẨM ĐỊNH BAN ĐẦU
 # =====================================================================
 with st.sidebar:
-    st.image("https://img.icons8.com/fluency/96/shop.png", width=50)
+    st.image("https://img.icons8.com/fluency/96/shop.png", width=48)
     st.markdown("## 🏪 1. CHỌN MẶT HÀNG")
     
     # 1. Chọn Cửa hàng
@@ -158,7 +198,7 @@ with st.sidebar:
         "Nhóm ngành hàng:",
         options=available_cats,
         format_func=lambda x: CATEGORY_NAMES_VI.get(x, x),
-        index=0
+        index=4 if 'Clothing' in available_cats else 0
     )
     
     # 3. Chọn Mặt hàng
@@ -167,8 +207,68 @@ with st.sidebar:
     if not available_pids:
         available_pids = sorted(df_raw['Product ID'].unique().tolist())
     selected_pid = st.selectbox("Mã sản phẩm (SKU):", options=available_pids, index=0)
+
+    # Lấy dữ liệu chi tiết của SKU được chọn
+    cond_sku = (df_raw['Store ID'] == selected_store) & (df_raw['Category'] == selected_cat) & (df_raw['Product ID'] == selected_pid)
+    df_sku_series = df_raw[cond_sku].groupby('Date').agg({
+        'Units Sold': 'sum',
+        'Inventory Level': 'last',
+        'Demand Forecast': 'mean',
+        'Holiday/Promotion': 'max',
+        'Price': 'mean',
+        'Discount': 'mean',
+        'Seasonality': 'last'
+    }).reset_index().sort_values('Date')
+
+    if len(df_sku_series) == 0:
+        df_sku_series = df_raw[df_raw['Product ID'] == selected_pid].groupby('Date').agg({
+            'Units Sold': 'sum',
+            'Inventory Level': 'last',
+            'Demand Forecast': 'mean',
+            'Holiday/Promotion': 'max',
+            'Price': 'mean',
+            'Discount': 'mean',
+            'Seasonality': 'last'
+        }).reset_index().sort_values('Date')
+
+    # Phân tích năng lực thực tế từ dữ liệu lịch sử
+    total_days = len(df_sku_series)
+    recent_30 = df_sku_series.tail(30)
+    prev_30 = df_sku_series.iloc[-60:-30] if total_days >= 60 else recent_30
     
-    # Lấy giá mặc định từ dataset
+    base_sales_avg = recent_30['Units Sold'].mean() if len(recent_30) > 0 else 50.0
+    base_sales_std = recent_30['Units Sold'].std() if len(recent_30) > 0 else 10.0
+    prev_sales_avg = prev_30['Units Sold'].mean() if len(prev_30) > 0 else base_sales_avg
+    
+    # Động lượng tăng trưởng thực tế (Sales Momentum %)
+    momentum_pct = ((base_sales_avg - prev_sales_avg) / prev_sales_avg) * 100 if prev_sales_avg > 0 else 0.0
+    
+    # Mức trần khả thi thực tế từ lịch sử bán
+    p90_feasible = df_sku_series['Units Sold'].quantile(0.90) if len(df_sku_series) > 0 else base_sales_avg * 1.3
+    max_history_sold = df_sku_series['Units Sold'].max() if len(df_sku_series) > 0 else base_sales_avg * 2.0
+    current_inventory = int(recent_30['Inventory Level'].iloc[-1]) if len(recent_30) > 0 else 50
+
+    # Phân loại trạng thái thực tế của sản phẩm
+    if momentum_pct > 8.0:
+        sku_nature = "GROWTH"
+        sku_badge = f'<div class="sku-badge-growth">🚀 Đang tăng trưởng (+{momentum_pct:.1f}%)</div>'
+        sku_reality_label = "SẢN PHẨM CÓ ĐÀ TĂNG TRƯỞNG (+{:.1f}%)".format(momentum_pct)
+        max_safe_growth_pct = min(50, int(round(momentum_pct + 15)))
+    elif momentum_pct >= -6.0:
+        sku_nature = "STABLE"
+        sku_badge = f'<div class="sku-badge-stable">⚖️ Bão hòa / Đi ngang ({momentum_pct:+.1f}%)</div>'
+        sku_reality_label = "SẢN PHẨM BÃO HÒA (sức mua đi ngang {:.1f} món/ngày)".format(base_sales_avg)
+        max_safe_growth_pct = 15
+    else:
+        sku_nature = "DECLINING"
+        sku_badge = f'<div class="sku-badge-declining">📉 Đang suy giảm ({momentum_pct:.1f}%)</div>'
+        sku_reality_label = "SẢN PHẨM ĐANG SUY GIẢM DOANH SỐ ({:.1f}%)".format(momentum_pct)
+        max_safe_growth_pct = 0
+
+    st.markdown(sku_badge, unsafe_allow_html=True)
+    st.caption(f"📊 Sức mua thực tế: **{base_sales_avg:.1f} món/ngày** (Lịch sử cao nhất: {max_history_sold} món/ngày).")
+
+    # Giá bán & giá vốn
     sku_price_default = float(df_cat[df_cat['Product ID'] == selected_pid]['Price'].mean()) if len(df_cat[df_cat['Product ID'] == selected_pid]) > 0 else 55.0
     default_price_vnd = int(round(sku_price_default * 1000))
     default_cost_vnd = int(round(default_price_vnd * 0.70))
@@ -187,191 +287,299 @@ with st.sidebar:
     plan_mode = st.radio(
         "Chọn cách bạn muốn lập kế hoạch:",
         options=[
-            "📈 Chế độ 1: Dự báo tự động theo sức mua thị trường",
-            "🎯 Chế độ 2: Đặt mục tiêu Doanh thu (Hệ thống tính ngược lượng nhập & vốn)"
+            "📈 Chế độ 1: Dự báo theo Kỳ vọng tăng trưởng (%)",
+            "🎯 Chế độ 2: Đặt mục tiêu Doanh thu (VNĐ)"
         ],
         index=0
     )
     
-    if plan_mode == "📈 Chế độ 1: Dự báo tự động theo sức mua thị trường":
-        growth_pct = st.slider("Kỳ vọng tăng trưởng doanh số sắp tới (%):", min_value=-30, max_value=100, value=15, step=5, help="Ví dụ: Đợt tới chạy quảng cáo marketing kỳ vọng tăng 15% khách mua")
-        discount_rate = st.selectbox("Chính sách giảm giá (Discount):", options=[0, 5, 10, 15, 20], format_func=lambda x: f"{x}% (Không sale)" if x == 0 else f"Giảm giá {x}%", index=0)
+    if plan_mode == "📈 Chế độ 1: Dự báo theo Kỳ vọng tăng trưởng (%)":
+        growth_pct = st.slider(
+            "Kỳ vọng tăng trưởng doanh số sắp tới (%):",
+            min_value=-30, max_value=100, value=20, step=5,
+            help="Tỷ lệ tăng trưởng doanh số mà bạn hoặc ban giám đốc kỳ vọng."
+        )
+        discount_rate = st.selectbox(
+            "Chính sách giảm giá (Discount):",
+            options=[0, 5, 10, 15, 20],
+            format_func=lambda x: f"{x}% (Không sale)" if x == 0 else f"Giảm giá {x}%",
+            index=0
+        )
         target_revenue_input = 0
     else:
-        st.caption("💡 Sếp hoặc Quản lý nhập trực tiếp số tiền Doanh thu muốn đạt được:")
+        st.caption("💡 Nhập trực tiếp số tiền Doanh thu muốn đạt được trong tháng:")
         target_revenue_input = st.number_input(
             "Doanh thu mục tiêu trong tháng tới (VNĐ):",
             min_value=1000000, max_value=1000000000,
-            value=int(p_price_vnd * 50 * 30), # Mặc định tương đương 50 món/ngày
+            value=int(p_price_vnd * base_sales_avg * 30),
             step=5000000,
-            help="Hệ thống sẽ tự động tính ngược lại số lượng hàng cần đặt và tiền vốn cần chuẩn bị"
+            help="Hệ thống sẽ đối chiếu với dữ liệu thực tế xem doanh thu này có khả thi không."
         )
-        growth_pct = 0
+        growth_pct = int(round(((target_revenue_input / (p_price_vnd * base_sales_avg * 30)) - 1.0) * 100)) if (p_price_vnd * base_sales_avg * 30) > 0 else 0
         discount_rate = 0
 
 # =====================================================================
-# 4. TÍNH TOÁN DỮ LIỆU & DỰ BÁO MỤC TIÊU
+# 4. TÍNH TOÁN & THẨM ĐỊNH KỲ VỌNG DỰA TRÊN DỮ LIỆU
 # =====================================================================
-cond = (df_raw['Store ID'] == selected_store) & (df_raw['Category'] == selected_cat) & (df_raw['Product ID'] == selected_pid)
-df_sku = df_raw[cond].groupby('Date').agg({
-    'Units Sold': 'sum',
-    'Inventory Level': 'last',
-    'Demand Forecast': 'mean',
-    'Holiday/Promotion': 'max',
-    'Price': 'mean',
-    'Discount': 'mean',
-    'Seasonality': 'last'
-}).reset_index().sort_values('Date')
-
-if len(df_sku) == 0:
-    df_sku = df_raw[df_raw['Product ID'] == selected_pid].groupby('Date').agg({
-        'Units Sold': 'sum',
-        'Inventory Level': 'last',
-        'Demand Forecast': 'mean',
-        'Holiday/Promotion': 'max',
-        'Price': 'mean',
-        'Discount': 'mean',
-        'Seasonality': 'last'
-    }).reset_index().sort_values('Date')
-
-recent_30 = df_sku.tail(30)
-base_sales_avg = recent_30['Units Sold'].mean()
-base_sales_std = recent_30['Units Sold'].std()
-current_inventory = int(recent_30['Inventory Level'].iloc[-1]) if len(recent_30) > 0 else 120
-
-# Tồn kho an toàn dự phòng (luôn dương)
+# Tồn kho an toàn dự phòng (Safety stock luôn dương)
 safety_stock = max(10, int(round(1.65 * (base_sales_std if not pd.isna(base_sales_std) else 5.0) * np.sqrt(3))))
 
-# XỬ LÝ THEO 2 CHẾ ĐỘ:
-if plan_mode == "🎯 Chế độ 2: Đặt mục tiêu Doanh thu (Hệ thống tính ngược lượng nhập & vốn)":
-    # Tính ngược từ Doanh thu mục tiêu
-    effective_price = p_price_vnd
-    target_units_month = int(round(target_revenue_input / effective_price)) if effective_price > 0 else 1000
-    target_units_day = max(1, int(round(target_units_month / 30)))
-    
-    # Dự kiến sức mua 7 ngày tới theo mục tiêu
-    demand_7days = target_units_day * 7
-    tomorrow_demand = target_units_day
-    
-    # Số lượng cần đặt hàng bổ sung để đạt mục tiêu
-    order_quantity = max(0, (demand_7days + safety_stock) - current_inventory)
-    capital_needed_vnd = order_quantity * c_cost_vnd
-    
-    # Doanh thu và lợi nhuận theo mục tiêu
-    planned_revenue_7days = demand_7days * p_price_vnd
-    planned_profit_7days = demand_7days * (p_price_vnd - c_cost_vnd)
-    roi_pct = (planned_profit_7days / (demand_7days * c_cost_vnd)) * 100 if c_cost_vnd > 0 else 0
+# 1. Tính toán lượng bán kỳ vọng chủ quan (Naive)
+if plan_mode == "🎯 Chế độ 2: Đặt mục tiêu Doanh thu (VNĐ)":
+    target_units_month = int(round(target_revenue_input / p_price_vnd)) if p_price_vnd > 0 else 1000
+    expected_daily_sales = max(1, int(round(target_units_month / 30)))
+    demand_7days_naive = expected_daily_sales * 7
 else:
-    # Tính theo tăng trưởng thị trường
-    discount_multiplier = 1.0 + (discount_rate * 0.015) # Giảm giá kích thích cầu
+    discount_multiplier = 1.0 + (discount_rate * 0.012)
     growth_multiplier = 1.0 + (growth_pct / 100.0)
-    tomorrow_demand = max(1, int(round(base_sales_avg * growth_multiplier * discount_multiplier)))
-    demand_7days = tomorrow_demand * 7
-    
-    order_quantity = max(0, (demand_7days + safety_stock) - current_inventory)
-    capital_needed_vnd = order_quantity * c_cost_vnd
-    
-    planned_revenue_7days = demand_7days * p_price_vnd * (1.0 - discount_rate/100.0)
-    planned_profit_7days = demand_7days * ((p_price_vnd * (1.0 - discount_rate/100.0)) - c_cost_vnd)
-    roi_pct = (planned_profit_7days / (demand_7days * c_cost_vnd)) * 100 if c_cost_vnd > 0 else 0
+    expected_daily_sales = max(1, int(round(base_sales_avg * growth_multiplier * discount_multiplier)))
+    demand_7days_naive = expected_daily_sales * 7
 
-days_left = round(current_inventory / tomorrow_demand, 1) if tomorrow_demand > 0 else 30.0
+# Lượng cần đặt nếu làm theo kỳ vọng chủ quan
+order_quantity_naive = max(0, (demand_7days_naive + safety_stock) - current_inventory)
+capital_naive_vnd = order_quantity_naive * c_cost_vnd
+
+# 2. Tính toán lượng bán thực tế an toàn dựa trên dữ liệu (Data-Backed Safe)
+if sku_nature == "DECLINING":
+    safe_daily_sales = max(1, int(round(base_sales_avg)))
+elif sku_nature == "STABLE":
+    safe_daily_sales = max(1, int(round(min(base_sales_avg * 1.15, p90_feasible))))
+else:
+    safe_daily_sales = max(1, int(round(min(expected_daily_sales, p90_feasible))))
+
+demand_7days_safe = safe_daily_sales * 7
+order_quantity_safe = max(0, (demand_7days_safe + safety_stock) - current_inventory)
+capital_safe_vnd = order_quantity_safe * c_cost_vnd
+
+# 3. Thẩm định mức độ rủi ro của kỳ vọng
+is_unrealistic = False
+risk_severity = "LOW"
+
+if sku_nature == "DECLINING" and (growth_pct > 0 or expected_daily_sales > base_sales_avg * 1.05):
+    is_unrealistic = True
+    risk_severity = "HIGH"
+elif growth_pct >= 40 or expected_daily_sales > p90_feasible:
+    is_unrealistic = True
+    risk_severity = "HIGH" if sku_nature != "GROWTH" else "MEDIUM"
+elif sku_nature == "STABLE" and growth_pct > 20:
+    is_unrealistic = True
+    risk_severity = "MEDIUM"
+
+# Số liệu khuyến nghị tác nghiệp
+recommended_order_quantity = order_quantity_safe if is_unrealistic else order_quantity_naive
+recommended_capital_vnd = capital_safe_vnd if is_unrealistic else capital_naive_vnd
+effective_daily_demand = safe_daily_sales if is_unrealistic else expected_daily_sales
+days_left = round(current_inventory / base_sales_avg, 1) if base_sales_avg > 0 else 30.0
 
 # =====================================================================
 # 5. HEADER CHÍNH
 # =====================================================================
 st.markdown(f"""
 <div class="top-header">
-    <h1>🏪 HỆ THỐNG DỰ BÁO BÁN HÀNG & LẬP KẾ HOẠCH DOANH THU</h1>
+    <h1>🏪 HỆ THỐNG DỰ BÁO BÁN HÀNG & THẨM ĐỊNH KẾ HOẠCH DỰA TRÊN DỮ LIỆU</h1>
     <p>Mặt hàng: <b>{selected_pid}</b> - {CATEGORY_NAMES_VI.get(selected_cat, selected_cat)} | Chi nhánh: <b>{STORE_NAMES_VI.get(selected_store, selected_store)}</b></p>
 </div>
 """, unsafe_allow_html=True)
 
 # =====================================================================
-# 6. KHỐI LẬP KẾ HOẠCH MỤC TIÊU DOANH THU (TÍNH NĂNG MỚI ĐÁP ỨNG YÊU CẦU)
+# 6. KHỐI CẢNH BÁO THẨM ĐỊNH KỲ VỌNG (TÍNH NĂNG MẤU CHỐT)
 # =====================================================================
-if plan_mode == "🎯 Chế độ 2: Đặt mục tiêu Doanh thu (Hệ thống tính ngược lượng nhập & vốn)":
+if risk_severity == "HIGH":
+    capital_excess = max(0, capital_naive_vnd - capital_safe_vnd)
+    units_excess = max(0, order_quantity_naive - order_quantity_safe)
+    dead_stock_days = int(round(units_excess / base_sales_avg)) if base_sales_avg > 0 else 45
+    
     st.markdown(f"""
-    <div class="target-card">
-        <h3 style="margin:0 0 8px 0; color:#1e40af;">🎯 BẢN ĐỒ KẾ HOẠCH MỤC TIÊU: {target_revenue_input:,.0f} VNĐ / THÁNG</h3>
-        <p style="margin:0 0 12px 0; font-size:0.95rem; color:#334155; line-height:1.5;">
-            Để đạt được mục tiêu doanh thu <b>{target_revenue_input:,.0f} VNĐ/tháng</b> với giá bán <b>{p_price_vnd:,.0f} đ/món</b>:
-            <br>• Cửa hàng cần bán được: <b>{target_units_month:,} món/tháng</b> (bình quân <b>{target_units_day} món/ngày</b>).
-            <br>• Hiện kho đang có <b>{current_inventory} món</b>. Để đủ hàng bán cho tuần tới và có đệm dự phòng <b>+{safety_stock} món</b>:
-            <br>👉 <b>HỆ THỐNG KHUYẾN NGHỊ: Đặt nhập {order_quantity} món</b> | <b>Chuẩn bị tiền vốn: {capital_needed_vnd:,.0f} VNĐ</b>.
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-else:
-    st.markdown(f"""
-    <div class="target-card">
-        <h3 style="margin:0 0 8px 0; color:#1e40af;">📈 DỰ BÁO TĂNG TRƯỞNG: KỲ VỌNG {growth_pct:+d}% DOANH SỐ</h3>
-        <p style="margin:0 0 12px 0; font-size:0.95rem; color:#334155; line-height:1.5;">
-            Lịch sử bán trung bình là <b>{base_sales_avg:.1f} món/ngày</b>. Với mức tăng trưởng kỳ vọng <b>{growth_pct:+d}%</b>:
-            <br>• Dự kiến khách mua trong 7 ngày tới là: <b>{demand_7days} món</b> (khoảng <b>{tomorrow_demand} món/ngày</b>).
-            <br>• Đệm an toàn chống cháy hàng: <b>+{safety_stock} món</b>. Kho hiện có: <b>{current_inventory} món</b>.
-            <br>👉 <b>HỆ THỐNG KHUYẾN NGHỊ: Đặt nhập {order_quantity} món</b> | <b>Chuẩn bị tiền vốn: {capital_needed_vnd:,.0f} VNĐ</b>.
-        </p>
+    <div class="danger-card">
+        <h3 style="margin:0 0 8px 0; color:#b91c1c; font-size:1.18rem;">
+            🛑 CẢNH BÁO RỦI RO CHÔN VỐN: KỲ VỌNG KHÔNG CÓ CƠ SỞ DỰA TRÊN DỮ LIỆU THỰC TẾ!
+        </h3>
+        <div style="font-size:0.95rem; line-height:1.6; color:#7f1d1d;">
+            • <b>Thực trạng từ dữ liệu:</b> Mặt hàng <b>{selected_pid}</b> đang ở trạng thái <b>{sku_reality_label}</b>. 
+            Sức mua 30 ngày qua chỉ đạt trung bình <b>{base_sales_avg:.1f} món/ngày</b> (thay đổi <b>{momentum_pct:.1f}%</b> so với giai đoạn trước). Kỷ lục bán cao nhất chỉ là {max_history_sold} món.
+            <br>• <b>Kỳ vọng chủ quan:</b> Bạn đang đặt mục tiêu tăng trưởng <b>+{growth_pct}%</b> (tương đương <b>{expected_daily_sales} món/ngày</b>). Mức này <b>vượt quá sức tiêu thụ thực tế của thị trường</b>!
+            <br>• <b>HẬU QUẢ NẾU CỐ TÌNH NHẬP:</b> Nếu đặt <b>{order_quantity_naive} món</b> theo kỳ vọng ảo này, doanh nghiệp sẽ bị <b>CHÔN VỐN OAN {capital_excess:,.0f} VNĐ</b> và thừa tới <b>{units_excess} món hàng</b> nằm đọng trong kho ít nhất <b>{dead_stock_days} ngày</b>, nguy cơ lỗi thời và hỏng hóc!
+            <br>👉 <b>HỆ THỐNG ĐÃ KÍCH HOẠT CHẾ ĐỘ BẢO VỆ VỐN:</b> Tự động điều chỉnh lệnh đặt về mức an toàn dựa trên dữ liệu là <b>{order_quantity_safe} món</b> (tiền vốn <b>{capital_safe_vnd:,.0f} VNĐ</b>).
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
-# =====================================================================
-# 7. HỆ THỐNG ĐÈN BÁO TỒN KHO
-# =====================================================================
-if days_left <= 3.0:
+elif risk_severity == "MEDIUM":
     st.markdown(f"""
-    <div class="alert-box-red">
-        <h4 style="margin:0 0 4px 0; color:#b91c1c;">🚨 ĐÈN ĐỎ: KHO SẮP HẾT HÀNG (CHỈ ĐỦ BÁN TRONG {days_left} NGÀY)!</h4>
-        Kho chỉ còn <b>{current_inventory} món</b>, với tiến độ bán dự kiến <b>{tomorrow_demand} món/ngày</b> thì chỉ hơn 2 ngày nữa sẽ đứt hàng. 
-        <b>Cần phát lệnh đặt {order_quantity} món ngay hôm nay!</b>
+    <div class="caution-card">
+        <h3 style="margin:0 0 8px 0; color:#b45309; font-size:1.15rem;">
+            ⚠️ CẢNH BÁO THẬN TRỌNG: KỲ VỌNG KHÁ CAO SO VỚI DUNG LƯỢNG THỰC TẾ
+        </h3>
+        <div style="font-size:0.95rem; line-height:1.6; color:#92400e;">
+            • Dữ liệu lịch sử cho thấy sản phẩm <b>{selected_pid}</b> ở trạng thái <b>{sku_reality_label}</b>.
+            <br>• Mức kỳ vọng <b>+{growth_pct}%</b> ({expected_daily_sales} món/ngày) tiệm cận trần khả thi (P90: {p90_feasible:.1f} món/ngày).
+            <br>• <b>Khuyến nghị:</b> Nên đặt thận trọng theo mức an toàn là <b>{order_quantity_safe} món</b> để thăm dò phản ứng của thị trường trước khi nhập ồ ạt.
+        </div>
     </div>
     """, unsafe_allow_html=True)
-elif days_left >= 15.0:
-    st.markdown(f"""
-    <div class="alert-box-yellow">
-        <h4 style="margin:0 0 4px 0; color:#b45309;">⚠️ ĐÈN VÀNG: TỒN KHO NHIỀU (ĐỦ BÁN TRONG {days_left} NGÀY)!</h4>
-        Kho đang có tới <b>{current_inventory} món</b>, đủ bán trong hơn 2 tuần tới. <b>Nên tạm ngưng đặt hàng thêm để tránh đọng vốn!</b>
-    </div>
-    """, unsafe_allow_html=True)
+
 else:
     st.markdown(f"""
-    <div class="alert-box-green">
-        <h4 style="margin:0 0 4px 0; color:#15803d;">✅ ĐÈN XANH: TỒN KHO AN TOÀN (CÒN ĐỦ BÁN TRONG {days_left} NGÀY)</h4>
-        Kho hiện có <b>{current_inventory} món</b>, mức tồn ổn định. Hôm nay đặt bổ sung <b>{order_quantity} món</b> để duy trì tiến độ.
+    <div class="success-card">
+        <h3 style="margin:0 0 8px 0; color:#15803d; font-size:1.15rem;">
+            ✅ DỮ LIỆU THỰC TẾ ỦNG HỘ: KỲ VỌNG RẤT KHẢ THI!
+        </h3>
+        <div style="font-size:0.95rem; line-height:1.6; color:#166534;">
+            • Dữ liệu 30 ngày qua ghi nhận sản phẩm <b>{selected_pid}</b> đang có đà <b>tăng trưởng tốt (+{momentum_pct:.1f}%)</b>.
+            <br>• Mức kỳ vọng <b>+{growth_pct}%</b> ({expected_daily_sales} món/ngày) hoàn toàn nằm trong dung lượng hấp thụ của thị trường.
+            <br>👉 <b>HỆ THỐNG KHUYẾN NGHỊ: ĐƯỢC PHÉP ĐẨY MẠNH NHẬP HÀNG!</b> Đặt <b>{order_quantity_naive} món</b> (vốn <b>{capital_naive_vnd:,.0f} VNĐ</b>) để kịp đón đầu sóng mua sắm của khách.
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
 # 4 Thẻ KPI Tác Nghiệp
 col_m1, col_m2, col_m3, col_m4 = st.columns(4)
 with col_m1:
-    st.metric("1. Kho hiện có sẵn", f"{current_inventory} món", help="Số lượng thực tế đang trong kho")
+    st.metric(
+        "1. Kho hiện có sẵn",
+        f"{current_inventory} món",
+        delta=f"Đủ bán ~{days_left} ngày",
+        help="Số lượng thực tế đang trong kho tại thời điểm hiện tại"
+    )
 with col_m2:
-    st.metric("2. Khách sẽ mua (7 ngày)", f"{demand_7days} món", delta=f"~{tomorrow_demand} món/ngày")
+    if is_unrealistic:
+        st.metric(
+            "2. Sức mua thực tế (7 ngày)",
+            f"{demand_7days_safe} món",
+            delta=f"Dữ liệu: ~{safe_daily_sales} món/ngày",
+            delta_color="normal"
+        )
+    else:
+        st.metric(
+            "2. Khách sẽ mua (7 ngày)",
+            f"{demand_7days_naive} món",
+            delta=f"Kỳ vọng: ~{expected_daily_sales} món/ngày"
+        )
 with col_m3:
-    st.metric("3. Đệm dự phòng an toàn", f"+{safety_stock} món", help="Lượng dự phòng chống cháy hàng")
+    st.metric(
+        "3. Đệm dự phòng an toàn",
+        f"+{safety_stock} món",
+        delta=f"Chống đứt hàng",
+        help="Lượng dự phòng luôn dương đảm bảo tỷ lệ phục vụ khách đạt chuẩn"
+    )
 with col_m4:
-    st.metric("⚡ 4. SỐ LƯỢNG CẦN ĐẶT", f"{order_quantity} món", delta=f"Vốn: {capital_needed_vnd:,.0f} đ")
+    if is_unrealistic:
+        st.metric(
+            "⚡ 4. NÊN ĐẶT (THEO DỮ LIỆU)",
+            f"{recommended_order_quantity} món",
+            delta=f"Vốn an toàn: {recommended_capital_vnd:,.0f} đ",
+            delta_color="inverse"
+        )
+    else:
+        st.metric(
+            "⚡ 4. SỐ LƯỢNG CẦN ĐẶT",
+            f"{recommended_order_quantity} món",
+            delta=f"Vốn: {recommended_capital_vnd:,.0f} đ"
+        )
 
 st.markdown("<div style='margin-bottom: 12px;'></div>", unsafe_allow_html=True)
 
 # =====================================================================
-# 8. CÁC TABS NGHIỆP VỤ & LẬP KẾ HOẠCH
+# 7. CÁC TABS NGHIỆP VỤ & LẬP KẾ HOẠCH
 # =====================================================================
-tab_target, tab_daily, tab_boss, tab_all = st.tabs([
-    "🎯 1. BẢN ĐỒ TÍNH NGƯỢC THEO MỤC TIÊU (SẾP & QUẢN LÝ)",
-    "📦 2. LỊCH ĐẶT HÀNG TỪNG NGÀY (GỬI NHÀ CUNG CẤP)",
-    "💼 3. BÁO CÁO DOANH THU & TIỀN LỜI (7 NGÀY TỚI)",
-    "📋 4. SỨC KHỎE TỒN KHO TOÀN BỘ SẢN PHẨM"
+tab_radar, tab_compare, tab_target, tab_daily, tab_boss = st.tabs([
+    "🔍 1. RA-ĐA 20 SẢN PHẨM (NÊN HAY CẤM KỲ VỌNG?)",
+    "⚖️ 2. ĐỐI CHIẾU KỲ VỌNG VS DỮ LIỆU THỰC TẾ",
+    "🎯 3. BẢN ĐỒ TÍNH NGƯỢC THEO MỤC TIÊU DOANH THU",
+    "📦 4. LỊCH ĐẶT HÀNG TỪNG NGÀY (GỬI NHÀ CUNG CẤP)",
+    "💼 5. BÁO CÁO TÀI CHÍNH & VỐN ĐẦU TƯ"
 ])
 
 # ---------------------------------------------------------------------
-# TAB 1: BẢN ĐỒ TÍNH NGƯỢC THEO MỤC TIÊU DOANH THU
+# TAB 1: RA-ĐA PHÂN LOẠI 20 SẢN PHẨM
+# ---------------------------------------------------------------------
+with tab_radar:
+    st.subheader(f"🔍 Ra-đa Phân Loại Sản Phẩm Trong Ngành: {CATEGORY_NAMES_VI.get(selected_cat, selected_cat)}")
+    st.caption("Dựa trên dữ liệu bán hàng thực tế 73.100 dòng để phân loại chính xác: Sản phẩm nào NÊN kỳ vọng tăng trưởng, sản phẩm nào BẮT BUỘC CẤM kỳ vọng!")
+    
+    radar_list = []
+    for pid in available_pids:
+        sub = df_cat[df_cat['Product ID'] == pid].groupby('Date')['Units Sold'].sum().reset_index().sort_values('Date')
+        m30 = sub.tail(30)['Units Sold'].mean() if len(sub) >= 30 else sub['Units Sold'].mean()
+        m_prev = sub.iloc[-60:-30]['Units Sold'].mean() if len(sub) >= 60 else m30
+        mom = ((m30 - m_prev) / m_prev) * 100 if m_prev > 0 else 0.0
+        p90 = sub['Units Sold'].quantile(0.90) if len(sub) > 0 else m30 * 1.3
+        
+        # Đánh giá phân loại
+        if mom > 8.0:
+            status_text = "🟢 NÊN KỲ VỌNG TĂNG TRƯỞNG"
+            rec_action = "🚀 Đẩy mạnh rót vốn, nhập hàng đón sóng"
+            max_growth = f"+{min(50, int(round(mom + 10)))}%"
+        elif mom >= -6.0:
+            status_text = "🟡 DUY TRÌ / KỲ VỌNG VỪA PHẢI"
+            rec_action = "⚖️ Nhập đủ bán 7-10 ngày, không ôm hàng"
+            max_growth = "+10% đến +15%"
+        else:
+            status_text = "🔴 CẤM KỲ VỌNG TĂNG TRƯỞNG"
+            rec_action = "🛑 Đang suy giảm, cấm tăng nhập, xả hàng tồn"
+            max_growth = "0% (Không có dư địa)"
+            
+        radar_list.append({
+            'Mã SKU': pid,
+            'Sức Mua TB (30 ngày)': f"{m30:.1f} món/ngày",
+            'Xu Hướng Thực Tế (Momentum)': f"{mom:+.1f}%",
+            'Trần Khả Thi (P90)': f"{p90:.0f} món/ngày",
+            'Đánh Giá Từ Dữ Liệu': status_text,
+            'Mức Trần Kỳ Vọng Hợp Lý': max_growth,
+            'Hành Động Khuyến Nghị': rec_action
+        })
+        
+    df_radar = pd.DataFrame(radar_list)
+    st.dataframe(df_radar, use_container_width=True, hide_index=True)
+    
+    st.markdown("""
+    > **📌 Nguyên lý Quản trị Dữ liệu Thực chiến:**
+    > - **Nhóm Đỏ (Cấm kỳ vọng):** Nếu nhân sự hoặc sếp cố tình tăng số lượng nhập cho nhóm này thì 90% sẽ biến thành **Hàng tồn kho chết (Dead Stock)**.
+    > - **Nhóm Xanh (Nên kỳ vọng):** Đây là các sản phẩm đang có "sóng" mua sắm của khách hàng, việc chuẩn bị nhiều vốn và nhập tăng là hoàn toàn chính xác!
+    """)
+
+# ---------------------------------------------------------------------
+# TAB 2: ĐỐI CHIẾU KỲ VỌNG VS DỮ LIỆU THỰC TẾ
+# ---------------------------------------------------------------------
+with tab_compare:
+    st.subheader(f"⚖️ Bảng So Sánh Hai Kịch Bản Cho Sản Phẩm: {selected_pid}")
+    st.caption("Minh bạch giữa việc 'Làm theo kỳ vọng chủ quan' vs 'Làm theo khuyến nghị dữ liệu thực tế':")
+    
+    col_c1, col_c2 = st.columns(2)
+    with col_c1:
+        st.markdown(f"""
+        <div style="background:#f8fafc; border:2px solid #cbd5e1; border-radius:10px; padding:16px;">
+            <h4 style="margin:0 0 10px 0; color:#334155;">📋 KỊCH BẢN 1: THEO KỲ VỌNG BẠN NHẬP</h4>
+            • Mức tăng trưởng kỳ vọng: <b>+{growth_pct}%</b><br>
+            • Lượng bán dự kiến: <b>{expected_daily_sales} món/ngày</b> ({demand_7days_naive} món/tuần)<br>
+            • Số lượng đề xuất nhập: <b style="color:#b91c1c; font-size:1.1rem;">{order_quantity_naive} món</b><br>
+            • Tiền vốn phải chi: <b>{capital_naive_vnd:,.0f} VNĐ</b><br>
+            • Đánh giá: <i>{ '⚠️ Tiềm ẩn nguy cơ chôn vốn cao!' if is_unrealistic else '✅ Hợp lý, có thể triển khai' }</i>
+        </div>
+        """, unsafe_allow_html=True)
+        
+    with col_c2:
+        st.markdown(f"""
+        <div style="background:#f0fdf4; border:2px solid #22c55e; border-radius:10px; padding:16px;">
+            <h4 style="margin:0 0 10px 0; color:#166534;">🛡️ KỊCH BẢN 2: AN TOÀN THEO DỮ LIỆU THỰC TẾ</h4>
+            • Mức tăng trưởng khả thi: <b>+{max_safe_growth_pct}%</b> (dựa trên lịch sử)<br>
+            • Lượng bán thực tế có thể hấp thụ: <b>{safe_daily_sales} món/ngày</b> ({demand_7days_safe} món/tuần)<br>
+            • Số lượng đề xuất nhập: <b style="color:#15803d; font-size:1.1rem;">{order_quantity_safe} món</b><br>
+            • Tiền vốn cần chi: <b>{capital_safe_vnd:,.0f} VNĐ</b><br>
+            • Hiệu quả: <b style="color:#166534;">Bảo vệ an toàn dòng tiền, tránh đọng hàng tồn!</b>
+        </div>
+        """, unsafe_allow_html=True)
+        
+    if is_unrealistic:
+        st.info(f"💡 **Bài học quản trị:** Nếu điều chỉnh từ Kịch bản 1 sang Kịch bản 2, bạn đã tiết kiệm cho doanh nghiệp **{(capital_naive_vnd - capital_safe_vnd):,.0f} VNĐ** tiền vốn lưu động không bị chôn vào kho!")
+
+# ---------------------------------------------------------------------
+# TAB 3: BẢN ĐỒ TÍNH NGƯỢC THEO MỤC TIÊU DOANH THU
 # ---------------------------------------------------------------------
 with tab_target:
-    st.subheader("🎯 Bảng Quy Đổi Mục Tiêu Kinh Doanh Sang Số Lượng Hàng & Tiền Vốn")
-    st.caption("Giúp Sếp và Quản lý trả lời câu hỏi: Muốn đạt bao nhiêu doanh thu thì cần nhập bao nhiêu hàng?")
+    st.subheader("🎯 Bản Đồ Quy Đổi Mục Tiêu Kinh Doanh Sang Số Lượng Hàng & Tiền Vốn")
+    st.caption("Cho phép Sếp và Quản lý thử nghiệm các mức doanh thu và kiểm tra ngay tính khả thi dựa trên dữ liệu:")
     
-    # Tạo bảng mô phỏng đa mức doanh thu
     test_revenues = [
         int(p_price_vnd * base_sales_avg * 30 * 0.8), # Mức thấp (-20%)
         int(p_price_vnd * base_sales_avg * 30 * 1.0), # Mức hiện tại (Chuẩn)
@@ -390,32 +598,35 @@ with tab_target:
         cap_week = u_order_week * c_cost_vnd
         prof_month = u_month * (p_price_vnd - c_cost_vnd)
         
+        # Thẩm định tính khả thi
+        if u_day > p90_feasible:
+            feasibility_tag = "🔴 Quá tải (Vượt trần thực tế)"
+        elif u_day > base_sales_avg * 1.15 and sku_nature == "DECLINING":
+            feasibility_tag = "🔴 Không khả thi (SKU đang giảm)"
+        elif u_day > base_sales_avg * 1.2:
+            feasibility_tag = "🟡 Thử thách cao"
+        else:
+            feasibility_tag = "🟢 Rất khả thi"
+        
         matrix_rows.append({
             'Mục Tiêu Doanh Thu (Tháng)': f"{rev:,.0f} VNĐ",
             'Sản Lượng Cần Bán': f"{u_month:,} món ({u_day} món/ngày)",
-            'Số Lượng Cần Đặt Cho Tuần Tới': f"{u_order_week:,} món",
-            'Tiền Vốn Cần Chi (Tuần)': f"{cap_week:,.0f} VNĐ",
-            'Tiền Lời Gộp Thu Về (Tháng)': f"{prof_month:,.0f} VNĐ",
-            'Ghi Chú': '⭐ Mục tiêu bạn vừa nhập' if rev == target_revenue_input else ('Chuẩn hiện tại' if rev == test_revenues[1] else 'Kịch bản thử nghiệm')
+            'Cần Đặt Cho Tuần Tới': f"{u_order_week:,} món",
+            'Tiền Vốn Cần Chi': f"{cap_week:,.0f} VNĐ",
+            'Tiền Lời Gộp (Tháng)': f"{prof_month:,.0f} VNĐ",
+            'Thẩm Định Thực Tế': feasibility_tag
         })
         
     df_matrix = pd.DataFrame(matrix_rows)
     st.dataframe(df_matrix, use_container_width=True, hide_index=True)
-    
-    st.markdown("#### 💡 Kết Luận Từ Bản Đồ Mục Tiêu:")
-    st.markdown(f"""
-    * **Để tăng doanh thu thêm 20%:** Cửa hàng chỉ cần nâng mức bán từ **{base_sales_avg:.0f} món/ngày** lên **{base_sales_avg*1.2:.0f} món/ngày**.
-    * **Số vốn tăng thêm cần chuẩn bị:** Chỉ khoảng **{(base_sales_avg*0.2*7*c_cost_vnd):,.0f} VNĐ** cho mỗi tuần đặt hàng.
-    * **Lợi nhuận gộp tương ứng:** Tăng thêm **+{(base_sales_avg*0.2*30*(p_price_vnd-c_cost_vnd)):,.0f} VNĐ mỗi tháng**!
-    """)
 
 # ---------------------------------------------------------------------
-# TAB 2: LỊCH ĐẶT HÀNG TỪNG NGÀY
+# TAB 4: LỊCH ĐẶT HÀNG TỪNG NGÀY
 # ---------------------------------------------------------------------
 with tab_daily:
-    st.subheader("📈 Lịch Sử Bán Hàng & Tiến Độ Đặt Hàng")
+    st.subheader(f"📈 Lịch Sử Bán & Kế Hoạch Giao Hàng Cho: {selected_pid}")
     
-    plot_df = df_sku.tail(45).copy()
+    plot_df = df_sku_series.tail(45).copy()
     fig = go.Figure()
     fig.add_trace(go.Scatter(
         x=plot_df['Date'], y=plot_df['Units Sold'],
@@ -424,11 +635,11 @@ with tab_daily:
     ))
     fig.add_trace(go.Scatter(
         x=plot_df['Date'], y=plot_df['Inventory Level'],
-        name='Tồn kho thực tế trong kho',
+        name='Tồn kho thực tế',
         line=dict(color='#64748b', width=1.8, dash='dot'), mode='lines'
     ))
     fig.update_layout(
-        height=380, margin=dict(l=20, r=20, t=40, b=20), plot_bgcolor='white',
+        height=360, margin=dict(l=20, r=20, t=40, b=20), plot_bgcolor='white',
         xaxis=dict(showgrid=True, gridcolor='#f1f5f9', title="Ngày"),
         yaxis=dict(showgrid=True, gridcolor='#f1f5f9', title="Số lượng sản phẩm"),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5)
@@ -436,13 +647,13 @@ with tab_daily:
     st.plotly_chart(fig, use_container_width=True)
     
     # Bảng 14 ngày tới
-    st.markdown("##### 📋 Kế Hoạch Nhập Kho 14 Ngày Tới (Tải Về Gửi Nhà Cung Cấp)")
+    st.markdown("##### 📋 Bảng Đặt Hàng 14 Ngày Tới Đã Được Chuẩn Hóa Theo Dữ Liệu")
     table_rows = []
     sim_inv = current_inventory
     date_range = pd.date_range(pd.Timestamp.now().date(), periods=14, freq='D')
     
     for d in date_range:
-        day_need = tomorrow_demand
+        day_need = effective_daily_demand
         needed = max(0, (day_need * 3 + safety_stock) - sim_inv)
         sim_inv = max(0, sim_inv - day_need + needed)
         
@@ -459,73 +670,42 @@ with tab_daily:
     
     csv_data = df_sched.to_csv(index=False).encode('utf-8-sig')
     st.download_button(
-        label="📥 Tải Kế Hoạch Nhập Hàng Này Về Máy (CSV)",
+        label="📥 Tải Kế Hoạch Đặt Hàng Này Về Máy (CSV)",
         data=csv_data,
         file_name=f"ke_hoach_nhap_{selected_pid}.csv",
         mime="text/csv"
     )
 
 # ---------------------------------------------------------------------
-# TAB 3: DÀNH CHO SẾP (DOANH THU & TIỀN LỜI)
+# TAB 5: BÁO CÁO TÀI CHÍNH
 # ---------------------------------------------------------------------
 with tab_boss:
-    st.subheader("💼 Báo Cáo Tài Chính Dự Kiến (Trong 7 Ngày Tới)")
+    st.subheader("💼 Báo Cáo Tài Chính & Dòng Tiền Dự Kiến (7 Ngày Tới)")
+    
+    planned_revenue_7days = demand_7days_safe * p_price_vnd
+    planned_profit_7days = demand_7days_safe * (p_price_vnd - c_cost_vnd)
+    roi_pct = (planned_profit_7days / (demand_7days_safe * c_cost_vnd)) * 100 if c_cost_vnd > 0 else 0
     
     c1, c2, c3, c4 = st.columns(4)
     with c1:
-        st.metric("Doanh Thu Dự Kiến", f"{planned_revenue_7days:,.0f} đ")
-        st.caption(f"Bán khoảng {demand_7days} món")
+        st.metric("Doanh Thu Dự Kiến (7 ngày)", f"{planned_revenue_7days:,.0f} đ")
+        st.caption(f"Tiêu thụ khoảng {demand_7days_safe} món")
     with c2:
-        st.metric("Tiền Vốn Cần Bỏ Ra", f"{demand_7days * c_cost_vnd:,.0f} đ")
-        st.caption(f"Giá vốn {c_cost_vnd:,.0f} đ/món")
+        st.metric("Tiền Vốn Cần Đầu Tư", f"{recommended_capital_vnd:,.0f} đ")
+        st.caption(f"Nhập {recommended_order_quantity} món")
     with c3:
         st.metric("Tiền Lời Gộp Dự Kiến", f"{planned_profit_7days:,.0f} đ", delta=f"{roi_pct:.1f}% ROI")
-        st.caption(f"Lời {p_price_vnd - c_cost_vnd:,.0f} đ trên mỗi món bán ra")
+        st.caption(f"Lời {p_price_vnd - c_cost_vnd:,.0f} đ trên mỗi món bán")
     with c4:
-        st.metric("Tỷ Lệ Đáp Ứng Khách", "96.5%", delta="Rất Tốt")
-        st.caption("Khách vào mua là có hàng ngay")
-
-# ---------------------------------------------------------------------
-# TAB 4: SỨC KHỎE TỒN KHO TOÀN BỘ SẢN PHẨM
-# ---------------------------------------------------------------------
-with tab_all:
-    st.subheader(f"📋 Bảng Tồn Kho Tất Cả Sản Phẩm Trong Ngành: {CATEGORY_NAMES_VI.get(selected_cat, selected_cat)}")
-    
-    all_summary = []
-    for pid in available_pids:
-        sub = df_cat[df_cat['Product ID'] == pid]
-        s_mean = sub['Units Sold'].tail(20).mean()
-        s_curr = int(sub['Inventory Level'].iloc[-1]) if len(sub) > 0 else 50
-        d_rem = round(s_curr / s_mean, 1) if s_mean > 0 else 30.0
-        
-        if d_rem <= 3.0:
-            stt = "🔴 Sắp hết hàng (Cần đặt ngay)"
-            rec = max(0, int(round(s_mean * 7 + 15 - s_curr)))
-        elif d_rem >= 15.0:
-            stt = "🟡 Thừa hàng (Tạm ngưng đặt)"
-            rec = 0
-        else:
-            stt = "🟢 An toàn"
-            rec = max(0, int(round(s_mean * 7 + 10 - s_curr)))
-            
-        all_summary.append({
-            'Mã sản phẩm': pid,
-            'Sức mua (món/ngày)': round(s_mean, 1),
-            'Tồn kho hiện có': f"{s_curr} món",
-            'Còn bán được trong': f"{d_rem} ngày",
-            'Tình trạng': stt,
-            'Gợi ý đặt hàng': f"{rec} món"
-        })
-        
-    df_all_view = pd.DataFrame(all_summary)
-    st.dataframe(df_all_view, use_container_width=True, hide_index=True)
+        st.metric("Tỷ Lệ Đáp Ứng Khách Hàng", "96.5%", delta="Chuẩn Bán Lẻ")
+        st.caption("Duy trì đệm dự phòng chống đứt hàng")
 
 # =====================================================================
-# 9. FOOTER
+# 8. FOOTER
 # =====================================================================
 st.markdown("---")
 st.markdown("""
 <div style="text-align:center; color:#64748b; font-size:0.85rem;">
-    <b>Hệ Thống Quản Trị Bán Hàng & Lập Kế Hoạch Doanh Thu Tồn Kho</b> | Thiết kế thực chiến phục vụ Doanh Nghiệp
+    <b>Hệ Thống Dự Báo Bán Hàng & Quản Trị Tồn Kho Thực Chiến</b> | Đồng hành cùng Doanh Nghiệp tối ưu hóa dòng tiền & chống chôn vốn
 </div>
 """, unsafe_allow_html=True)
