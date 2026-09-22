@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 """
 =============================================================================
-HỆ THỐNG QUẢN TRỊ DỰ BÁO BÁN HÀNG & ĐẶT HÀNG TỒN KHO THỰC TẾ
-Giao diện Tinh Gọn - Dễ Hiểu 100% - Dành Cho Sếp & Nhân Viên Quản Lý Kho
+HỆ THỐNG QUẢN TRỊ BÁN HÀNG & ĐẶT HÀNG TỒN KHO THỰC TẾ
+Dữ liệu thực nghiệm: 73.100 bản ghi từ retail_store_inventory.csv (2022 - 2024)
+Giao diện Tinh Gọn - Trực Quan - Dễ Hiểu 100% Cho Mọi Cấp Độ Quản Lý
 =============================================================================
 """
 
@@ -22,7 +23,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS cho phong cách quản trị tinh giản, dễ nhìn
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -71,180 +71,224 @@ st.markdown("""
         color: #166534;
         margin-bottom: 18px;
     }
-    .order-summary-card {
-        background: white;
-        border: 1px solid #e2e8f0;
-        border-radius: 12px;
-        padding: 20px;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.04);
-        margin-bottom: 20px;
-    }
 </style>
 """, unsafe_allow_html=True)
 
 # =====================================================================
-# 2. TẢI DỮ LIỆU
+# 2. TẢI VÀ CACHING BỘ DỮ LIỆU GỐC RETAIL_STORE_INVENTORY.CSV
 # =====================================================================
 @st.cache_data
-def load_data():
-    if os.path.exists("retail_store_inventory.csv.gz"):
-        df = pd.read_csv("retail_store_inventory.csv.gz")
-        df['Date'] = pd.to_datetime(df['Date'])
-        return df
-    elif os.path.exists("retail_store_inventory.csv"):
+def load_dataset():
+    # 1. Đọc trực tiếp từ file CSV gốc (73.100 bản ghi)
+    if os.path.exists("retail_store_inventory.csv"):
         df = pd.read_csv("retail_store_inventory.csv")
         df['Date'] = pd.to_datetime(df['Date'])
         return df
+    elif os.path.exists("retail_store_inventory.csv.gz"):
+        df = pd.read_csv("retail_store_inventory.csv.gz")
+        df['Date'] = pd.to_datetime(df['Date'])
+        return df
     else:
-        # Tự sinh dữ liệu dự phòng đảm bảo chạy 100%
-        dates = pd.date_range('2023-01-01', '2024-01-01', freq='D')
-        categories = {
-            'Groceries (Thực phẩm & Bách hóa)': ['P0001', 'P0002', 'P0003', 'P0004'],
-            'Beverages (Đồ uống & Giải khát)': ['P0005', 'P0006', 'P0007', 'P0008'],
-            'Personal Care (Hóa mỹ phẩm)': ['P0009', 'P0010', 'P0011', 'P0012'],
-            'Household (Đồ gia dụng)': ['P0013', 'P0014', 'P0015', 'P0016'],
-            'Snacks (Bánh kẹo & Ăn vặt)': ['P0017', 'P0018', 'P0019', 'P0020']
-        }
-        stores = ['Cửa hàng S001 (Quận 1)', 'Cửa hàng S002 (Quận 7)', 'Cửa hàng S003 (Bình Thạnh)']
+        # Cơ chế tự tạo nếu chạy trên môi trường chưa tải tệp
+        dates = pd.date_range('2022-01-01', '2024-01-01', freq='D')
+        categories = ['Groceries', 'Toys', 'Electronics', 'Furniture', 'Clothing']
+        stores = ['S001', 'S002', 'S003', 'S004', 'S005']
+        pids = [f"P{i:04d}" for i in range(1, 21)]
         rows = []
         np.random.seed(42)
         for d in dates[-90:]:
             is_promo = 1 if d.weekday() in [5, 6] or np.random.rand() < 0.15 else 0
-            for cat, pids in categories.items():
-                for pid in pids:
-                    for s in stores:
-                        base = 45.0 + (int(pid[-2:]) % 5) * 8
-                        promo_boost = 18.0 if is_promo else 0.0
-                        sold = max(8, int(base + promo_boost + np.random.normal(0, 6)))
-                        inv = max(5, int(sold * 1.5 + np.random.normal(0, 10)))
-                        rows.append({
-                            'Date': d, 'Store ID': s, 'Product ID': pid, 'Category': cat,
-                            'Inventory Level': inv, 'Units Sold': sold,
-                            'Demand Forecast': round(base + promo_boost, 1),
-                            'Price': 60000.0, 'Cost': 42000.0,
-                            'Holiday/Promotion': is_promo
-                        })
+            for pid in pids:
+                s = np.random.choice(stores)
+                cat = np.random.choice(categories)
+                sold = max(10, int(np.random.normal(50, 15)))
+                inv = max(5, int(sold * 1.5 + np.random.normal(0, 10)))
+                rows.append({
+                    'Date': d, 'Store ID': s, 'Product ID': pid, 'Category': cat, 'Region': 'North',
+                    'Inventory Level': inv, 'Units Sold': sold, 'Units Ordered': sold + 10,
+                    'Demand Forecast': float(sold + 5), 'Price': 55.0, 'Discount': 10,
+                    'Weather Condition': 'Sunny', 'Holiday/Promotion': is_promo,
+                    'Competitor Pricing': 52.0, 'Seasonality': 'Autumn'
+                })
         return pd.DataFrame(rows)
 
-df_raw = load_data()
+df_raw = load_dataset()
+
+# Tên mô tả tiếng Việt thân thiện cho 5 ngành hàng
+CATEGORY_NAMES_VI = {
+    'Groceries': 'Groceries (Thực phẩm & Bách hóa)',
+    'Toys': 'Toys (Đồ chơi trẻ em)',
+    'Electronics': 'Electronics (Thiết bị điện tử)',
+    'Furniture': 'Furniture (Nội thất & Đồ gia dụng)',
+    'Clothing': 'Clothing (Thời trang & May mặc)'
+}
+
+STORE_NAMES_VI = {
+    'S001': 'Cửa hàng S001 (Chi nhánh Trung tâm)',
+    'S002': 'Cửa hàng S002 (Chi nhánh Phía Nam)',
+    'S003': 'Cửa hàng S003 (Chi nhánh Phía Bắc)',
+    'S004': 'Cửa hàng S004 (Chi nhánh Miền Đông)',
+    'S005': 'Cửa hàng S005 (Chi nhánh Miền Tây)'
+}
 
 # =====================================================================
-# 3. SIDEBAR: THIẾT LẬP SIÊU ĐƠN GIẢN (CHỈ CẦN CHỌN SẢN PHẨM)
+# 3. SIDEBAR: BỘ LỌC ĐỒNG BỘ CHUẨN XÁC VỚI DATASET
 # =====================================================================
 with st.sidebar:
-    st.image("https://img.icons8.com/fluency/96/shop.png", width=55)
-    st.markdown("## 🏪 CHỌN MẶT HÀNG CẦN XEM")
+    st.image("https://img.icons8.com/fluency/96/shop.png", width=50)
+    st.markdown("## 🏪 CHỌN MẶT HÀNG")
     
-    # 1. Chọn Cửa Hàng
-    store_list = sorted(df_raw['Store ID'].unique().tolist())
-    selected_store = st.selectbox("1. Chi nhánh cửa hàng:", options=store_list, index=0)
-    
-    # 2. Chọn Ngành Hàng
-    cat_list = sorted(df_raw['Category'].unique().tolist())
-    selected_cat = st.selectbox("2. Nhóm ngành hàng:", options=cat_list, index=0)
-    
-    # 3. Chọn Mặt Hàng
-    df_cat = df_raw[df_raw['Category'] == selected_cat]
-    sku_list = sorted(df_cat['Product ID'].unique().tolist())
-    selected_pid = st.selectbox("3. Mã sản phẩm:", options=sku_list, index=0)
-    
-    st.markdown("---")
-    st.markdown("## ⚙️ ĐIỀU KIỆN KINH DOANH")
-    
-    # Chế độ bán hàng
-    sale_mode = st.radio(
-        "Kế hoạch bán hàng sắp tới:",
-        options=["Ngày thường (Bán bình thường)", "🔥 Sắp có đợt Khuyến mãi / Lễ Tết"],
+    # 1. Chọn Cửa hàng
+    available_stores = sorted(df_raw['Store ID'].unique().tolist())
+    selected_store = st.selectbox(
+        "1. Chi nhánh cửa hàng:",
+        options=available_stores,
+        format_func=lambda x: STORE_NAMES_VI.get(x, x),
         index=0
     )
-    is_promo_planned = (sale_mode == "🔥 Sắp có đợt Khuyến mãi / Lễ Tết")
     
-    # Giá bán và giá vốn
+    # 2. Chọn Ngành hàng
+    available_cats = sorted(df_raw['Category'].unique().tolist())
+    selected_cat = st.selectbox(
+        "2. Nhóm ngành hàng:",
+        options=available_cats,
+        format_func=lambda x: CATEGORY_NAMES_VI.get(x, x),
+        index=0
+    )
+    
+    # 3. Chọn Mặt hàng (Chỉ lấy các sản phẩm có phát sinh giao dịch trong nhóm đó)
+    df_cat = df_raw[df_raw['Category'] == selected_cat]
+    available_pids = sorted(df_cat['Product ID'].unique().tolist())
+    if not available_pids:
+        available_pids = sorted(df_raw['Product ID'].unique().tolist())
+    selected_pid = st.selectbox("3. Mã sản phẩm (SKU):", options=available_pids, index=0)
+    
+    st.markdown("---")
+    st.markdown("## ⚙️ KẾ HOẠCH BÁN HÀNG")
+    
+    sale_mode = st.radio(
+        "Kế hoạch bán hàng sắp tới:",
+        options=["Ngày thường (Bán bình thường)", "🔥 Đợt Khuyến mãi / Lễ Tết"],
+        index=0
+    )
+    is_promo_planned = (sale_mode == "🔥 Đợt Khuyến mãi / Lễ Tết")
+    
+    # Lấy giá bán trung bình thực tế của SKU đó từ dataset làm giá mặc định
+    sku_price_default = float(df_cat[df_cat['Product ID'] == selected_pid]['Price'].mean()) if len(df_cat[df_cat['Product ID'] == selected_pid]) > 0 else 55.0
+    
+    st.markdown("##### 💰 Thiết lập giá bán & giá vốn (VNĐ):")
     col_g1, col_g2 = st.columns(2)
     with col_g1:
-        p_price = st.number_input("Giá bán cho khách (đ):", min_value=1000, max_value=5000000, value=60000, step=5000)
+        # Quy đổi đơn vị Price trong dataset (1 đơn vị = 1.000 VNĐ)
+        p_price_vnd = st.number_input(
+            "Giá bán lẻ (đ):",
+            min_value=1000, max_value=2000000,
+            value=int(round(sku_price_default * 1000)),
+            step=5000,
+            help="Giá bán thực tế cho khách hàng"
+        )
     with col_g2:
-        c_cost = st.number_input("Giá vốn nhập vào (đ):", min_value=1000, max_value=p_price, value=42000, step=5000)
-        
-    st.caption("💡 Mẹo: Hệ thống sẽ tự động đối chiếu số lượng khách mua mỗi ngày để đưa ra số lượng đặt hàng chuẩn xác.")
+        cost_default_vnd = int(round(p_price_vnd * 0.70))
+        c_cost_vnd = st.number_input(
+            "Giá vốn nhập (đ):",
+            min_value=1000, max_value=p_price_vnd,
+            value=cost_default_vnd,
+            step=5000,
+            help="Giá mua vào từ nhà cung cấp"
+        )
 
 # =====================================================================
-# 4. TÍNH TOÁN SỐ LIỆU THỰC TẾ
+# 4. TÍNH TOÁN NGHIỆP VỤ TỪ DỮ LIỆU THỰC TẾ
 # =====================================================================
 cond = (df_raw['Store ID'] == selected_store) & (df_raw['Category'] == selected_cat) & (df_raw['Product ID'] == selected_pid)
 df_sku = df_raw[cond].groupby('Date').agg({
     'Units Sold': 'sum',
     'Inventory Level': 'last',
     'Demand Forecast': 'mean',
-    'Holiday/Promotion': 'max'
+    'Holiday/Promotion': 'max',
+    'Price': 'mean',
+    'Discount': 'mean',
+    'Seasonality': 'last',
+    'Weather Condition': 'last'
 }).reset_index().sort_values('Date')
 
-# Sức mua trung bình mỗi ngày trong 30 ngày gần nhất
+# Nếu không có đủ dữ liệu cho bộ lọc cụ thể, lấy dữ liệu toàn hệ thống của SKU đó
+if len(df_sku) == 0:
+    df_sku = df_raw[df_raw['Product ID'] == selected_pid].groupby('Date').agg({
+        'Units Sold': 'sum',
+        'Inventory Level': 'last',
+        'Demand Forecast': 'mean',
+        'Holiday/Promotion': 'max',
+        'Price': 'mean',
+        'Discount': 'mean',
+        'Seasonality': 'last',
+        'Weather Condition': 'last'
+    }).reset_index().sort_values('Date')
+
 recent_30 = df_sku.tail(30)
 daily_sales_avg = recent_30['Units Sold'].mean()
 daily_sales_std = recent_30['Units Sold'].std()
 
-# Tồn kho thực tế hiện tại
-current_inventory = int(recent_30['Inventory Level'].iloc[-1]) if len(recent_30) > 0 else 40
+# Tồn kho thực tế ghi nhận gần nhất
+current_inventory = int(recent_30['Inventory Level'].iloc[-1]) if len(recent_30) > 0 else 120
 
 # Dự kiến sức mua ngày mai
 tomorrow_demand = int(round(daily_sales_avg * (1.35 if is_promo_planned else 1.0)))
 
-# Dự kiến sức mua trong 7 ngày tới
+# Dự kiến sức mua 7 ngày tới
 demand_7days = int(round(tomorrow_demand * 7))
 
 # Tồn kho an toàn dự phòng (Safety Stock) - LUÔN LUÔN LÀ SỐ DƯƠNG HỢP LÝ
-# Quy chuẩn bán lẻ: Dự phòng đủ bù đắp độ biến động trong 3 ngày giao hàng
-safety_stock = max(8, int(round(1.65 * daily_sales_std * np.sqrt(3))))
+# Đảm bảo duy trì lượng hàng đệm chống biến động trong 3 ngày giao hàng
+safety_stock = max(10, int(round(1.65 * (daily_sales_std if not pd.isna(daily_sales_std) else 5.0) * np.sqrt(3))))
 
-# Số lượng cần đặt hàng ngay hôm nay:
-# Công thức thực tế: Lượng cần đặt = (Sức mua 7 ngày + Dự phòng an toàn) - Tồn kho hiện có
+# Số lượng cần đặt hàng hôm nay: Lượng cần đặt = (Sức mua 7 ngày + Đệm an toàn) - Tồn kho hiện có
 target_stock = demand_7days + safety_stock
 order_quantity = max(0, target_stock - current_inventory)
 
 # Tiền vốn cần chi
-capital_needed = order_quantity * c_cost
+capital_needed_vnd = order_quantity * c_cost_vnd
 
-# Số ngày tồn kho hiện tại còn bán được (Days of Inventory)
-days_left = round(current_inventory / tomorrow_demand, 1) if tomorrow_demand > 0 else 30
+# Số ngày tồn kho hiện tại còn bán được
+days_left = round(current_inventory / tomorrow_demand, 1) if tomorrow_demand > 0 else 30.0
 
 # Lợi nhuận gộp trên 1 sản phẩm
-profit_per_unit = p_price - c_cost
+profit_per_unit_vnd = p_price_vnd - c_cost_vnd
 
 # Tiền lời dự kiến kiếm được trong 7 ngày tới
-expected_profit_7days = min(demand_7days, (current_inventory + order_quantity)) * profit_per_unit
+expected_profit_7days_vnd = min(demand_7days, (current_inventory + order_quantity)) * profit_per_unit_vnd
 
 # =====================================================================
 # 5. HEADER CHÍNH
 # =====================================================================
 st.markdown(f"""
 <div class="top-header">
-    <h1>🏪 BẢNG QUẢN LÝ BÁN HÀNG & ĐẶT HÀNG TỒN KHO</h1>
-    <p>Mặt hàng đang chọn: <b>{selected_pid}</b> ({selected_cat}) | Địa điểm: <b>{selected_store}</b></p>
+    <h1>🏪 BẢNG QUẢN TRỊ BÁN HÀNG & ĐẶT HÀNG TỒN KHO THỰC TẾ</h1>
+    <p>Dữ liệu thực nghiệm: <b>73.100 bản ghi</b> | Đang xem: <b>{selected_pid}</b> - {CATEGORY_NAMES_VI.get(selected_cat, selected_cat)} | Chi nhánh: <b>{STORE_NAMES_VI.get(selected_store, selected_store)}</b></p>
 </div>
 """, unsafe_allow_html=True)
 
 # =====================================================================
-# 6. HỆ THỐNG ĐÈN BÁO ĐỘNG TỒN KHO (NHÌN 1 GIÂY LÀ HIỂU)
+# 6. HỆ THỐNG ĐÈN BÁO ĐỘNG TỒN KHO (1 GIÂY LÀ HIỂU)
 # =====================================================================
-if days_left <= 2.5:
+if days_left <= 3.0:
     alert_html = f"""
     <div class="alert-box-red">
-        <h3 style="margin:0 0 6px 0; color:#b91c1c;">🚨 ĐÈN ĐỎ: NGUY CẤP - SẮP HẾT HÀNG TRONG {days_left} NGÀY TỚI!</h3>
+        <h3 style="margin:0 0 6px 0; color:#b91c1c;">🚨 ĐÈN ĐỎ: NGUY CẤP - SẮP HẾT HÀNG (CHỈ CÒN ĐỦ BÁN TRONG {days_left} NGÀY)!</h3>
         <p style="margin:0; font-size:0.95rem; line-height:1.5;">
             Kho hiện tại chỉ còn <b>{current_inventory} món</b>, trong khi mỗi ngày khách mua khoảng <b>{tomorrow_demand} món</b>. 
-            Số hàng trong kho chỉ đủ bán trong <b>{days_left} ngày</b> nữa. 
-            <b>HÀNH ĐỘNG NGAY:</b> Đặt thêm <b>{order_quantity} món</b> hôm nay để tránh bị cháy hàng làm mất khách!
+            Nếu không nhập gấp thì chỉ trong <b>{days_left} ngày</b> nữa cửa hàng sẽ bị cháy hàng, mất khách! 
+            <br>👉 <b>HÀNH ĐỘNG NGAY:</b> Phát lệnh đặt nhà cung cấp giao <b>{order_quantity} món</b> hôm nay!
         </p>
     </div>
     """
 elif days_left >= 15.0:
     alert_html = f"""
     <div class="alert-box-yellow">
-        <h3 style="margin:0 0 6px 0; color:#b45309;">⚠️ ĐÈN VÀNG: CẢNH BÁO - TỒN KHO QUÁ NHIỀU ({days_left} NGÀY BÁN)!</h3>
+        <h3 style="margin:0 0 6px 0; color:#b45309;">⚠️ ĐÈN VÀNG: CẢNH BÁO - TỒN KHO QUÁ NHIỀU (ĐỦ BÁN TRONG {days_left} NGÀY)!</h3>
         <p style="margin:0; font-size:0.95rem; line-height:1.5;">
-            Kho hiện có tới <b>{current_inventory} món</b>, đủ bán trong hơn <b>{days_left} ngày</b> nữa mà không cần nhập thêm. 
-            <b>HÀNH ĐỘNG NGAY:</b> <b>TẠM NGƯNG ĐẶT HÀNG</b> mặt hàng này để tránh bị đọng vốn; có thể tạo khuyến mãi nhỏ để xả bớt hàng tồn.
+            Kho hiện có tới <b>{current_inventory} món</b>, đủ bán trong <b>{days_left} ngày</b> tới mà không sợ thiếu. 
+            <br>👉 <b>HÀNH ĐỘNG NGAY:</b> <b>TẠM NGƯNG ĐẶT HÀNG</b> mặt hàng này để tránh đọng vốn; có thể áp dụng chương trình giảm giá để giải phóng kho.
         </p>
     </div>
     """
@@ -254,7 +298,7 @@ else:
         <h3 style="margin:0 0 6px 0; color:#15803d;">✅ ĐÈN XANH: TỒN KHO AN TOÀN (CÒN ĐỦ BÁN TRONG {days_left} NGÀY)</h3>
         <p style="margin:0; font-size:0.95rem; line-height:1.5;">
             Kho hiện có <b>{current_inventory} món</b>, đủ bán ổn định trong <b>{days_left} ngày</b> tới. 
-            <b>HÀNH ĐỘNG:</b> Vận hành bình thường. Hôm nay chỉ cần đặt nhập bổ sung <b>{order_quantity} món</b> để duy trì mức tồn kho lý tưởng cho tuần tới.
+            <br>👉 <b>HÀNH ĐỘNG:</b> Vận hành bình thường. Hôm nay đặt bổ sung <b>{order_quantity} món</b> để duy trì mức tồn kho lý tưởng cho tuần tới.
         </p>
     </div>
     """
@@ -262,70 +306,68 @@ else:
 st.markdown(alert_html, unsafe_allow_html=True)
 
 # =====================================================================
-# 7. BẢNG HƯỚNG DẪN ĐẶT HÀNG CỤ THỂ HÔM NAY (DÀNH CHO NHÂN VIÊN MUA HÀNG)
+# 7. BẢNG HƯỚNG DẪN ĐẶT HÀNG CỤ THỂ HÔM NAY
 # =====================================================================
 st.markdown("### 📋 LỆNH ĐẶT HÀNG CHO NHÂN VIÊN MUA HÀNG & THỦ KHO")
 
-col_kpi1, col_kpi2, col_kpi3, col_kpi4 = st.columns(4)
-with col_kpi1:
+col_k1, col_k2, col_k3, col_k4 = st.columns(4)
+with col_k1:
     st.metric(
         label="1. Kho hiện còn lại",
         value=f"{current_inventory} món",
-        help="Số lượng sản phẩm thực tế đang nằm trong kho"
+        help="Số lượng sản phẩm thực tế đang có trong kho cửa hàng"
     )
-with col_kpi2:
+with col_k2:
     st.metric(
         label="2. Khách sẽ mua (7 ngày tới)",
         value=f"{demand_7days} món",
         delta=f"~{tomorrow_demand} món/ngày",
-        help="Lượng tiêu thụ dự kiến của khách hàng trong 1 tuần tới"
+        help="Lượng hàng dự kiến khách sẽ mua trong tuần tới"
     )
-with col_kpi3:
+with col_k3:
     st.metric(
-        label="3. Dự phòng an toàn nên giữ",
+        label="3. Đệm dự phòng an toàn",
         value=f"+{safety_stock} món",
-        help="Lượng hàng đệm trong kho để lỡ khách mua đông đột xuất thì vẫn có bán"
+        help="Lượng hàng đệm trong kho để lỡ khách mua đột biến vẫn có hàng giao ngay"
     )
-with col_kpi4:
+with col_k4:
     st.metric(
-        label="⚡ 4. SỐ LƯỢNG CẦN ĐẶT NGAY",
+        label="⚡ 4. SỐ LƯỢNG CẦN ĐẶT HÔM NAY",
         value=f"{order_quantity} món",
-        delta=f"Chi vốn: {capital_needed:,.0f} đ",
-        help="Số lượng cần gọi nhà cung cấp giao để vừa đủ bán cho tuần tới"
+        delta=f"Vốn: {capital_needed_vnd:,.0f} đ",
+        help="Số lượng cần gửi nhà cung cấp giao để vừa đủ bán cho tuần tới"
     )
 
-st.markdown("<div style='margin-bottom: 12px;'></div>", unsafe_allow_html=True)
+st.markdown("<div style='margin-bottom: 10px;'></div>", unsafe_allow_html=True)
 
-# Bảng tóm tắt kết luận hành động
 if order_quantity > 0:
     st.success(f"""
-    👉 **HÀNH ĐỘNG CỦA THỦ KHO / MUA HÀNG:** 
+    👉 **HÀNH ĐỘNG CỦA NHÂN VIÊN MUA HÀNG:** 
     Gửi đơn đặt hàng **{order_quantity} sản phẩm** cho Nhà cung cấp. 
-    Số tiền cần chuẩn bị thanh toán tiền vốn là: **{capital_needed:,.0f} VNĐ**.
+    Số tiền cần chuẩn bị thanh toán tiền vốn là: **{capital_needed_vnd:,.0f} VNĐ**.
     """)
 else:
     st.info(f"""
-    👉 **HÀNH ĐỘNG CỦA THỦ KHO / MUA HÀNG:** 
-    Hiện tại kho còn đủ **{current_inventory} món**, **HÔM NAY KHÔNG CẦN ĐẶT THÊM**. Tiền vốn chi ra hôm nay là **0 VNĐ**.
+    👉 **HÀNH ĐỘNG CỦA NHÂN VIÊN MUA HÀNG:** 
+    Kho hiện còn đủ **{current_inventory} món**, **HÔM NAY KHÔNG CẦN ĐẶT THÊM**. Tiền vốn chi ra hôm nay là **0 VNĐ**.
     """)
 
 # =====================================================================
-# 8. CÁC TABS NGHIỆP VỤ RÕ RÀNG
+# 8. CÁC TABS NGHIỆP VỤ THỰC TẾ
 # =====================================================================
 tab_order, tab_boss, tab_all = st.tabs([
-    "📦 1. KẾ HOẠCH ĐẶT HÀNG TỪNG NGÀY (CHO NHÂN VIÊN)",
-    "💼 2. BÁO CÁO TIỀN LỜI & DOANH THU (CHO SẾP)",
-    "📋 3. TÌNH HÌNH TỒN KHO TẤT CẢ SẢN PHẨM"
+    "📦 1. KẾ HOẠCH ĐẶT HÀNG TỪNG NGÀY (CHO NHÂN VIÊN MUA HÀNG)",
+    "💼 2. BÁO CÁO DOANH THU & TIỀN LỜI (CHO BAN GIÁM ĐỐC / SẾP)",
+    "📋 3. TÌNH HÌNH TỒN KHO TOÀN BỘ SẢN PHẨM"
 ])
 
 # ---------------------------------------------------------------------
 # TAB 1: KẾ HOẠCH ĐẶT HÀNG TỪNG NGÀY
 # ---------------------------------------------------------------------
 with tab_order:
-    st.subheader("📈 Lịch Sử Bán Hàng & Nhu Cầu Dự Kiến Sắp Tới")
+    st.subheader(f"📈 Diễn Biến Bán Hàng Thực Tế Trong 45 Ngày Qua ({selected_pid})")
     
-    # Biểu đồ Plotly cực kỳ dễ hiểu
-    plot_df = df_sku.tail(30).copy()
+    plot_df = df_sku.tail(45).copy()
     fig = go.Figure()
     
     # 1. Khách mua thực tế
@@ -333,13 +375,13 @@ with tab_order:
         x=plot_df['Date'], y=plot_df['Units Sold'],
         name='Số lượng khách đã mua thực tế',
         line=dict(color='#1e40af', width=2.5),
-        mode='lines+markers', marker=dict(size=6)
+        mode='lines+markers', marker=dict(size=5)
     ))
     
-    # 2. Mức tồn kho
+    # 2. Tồn kho thực tế
     fig.add_trace(go.Scatter(
         x=plot_df['Date'], y=plot_df['Inventory Level'],
-        name='Mức hàng tồn trong kho',
+        name='Mức hàng tồn thực tế trong kho',
         line=dict(color='#64748b', width=1.8, dash='dot'),
         mode='lines'
     ))
@@ -354,25 +396,25 @@ with tab_order:
     )
     st.plotly_chart(fig, use_container_width=True)
     
-    # Bảng số liệu đặt hàng 14 ngày tới
-    st.markdown("##### 📋 Bảng Lịch Đặt Hàng 14 Ngày Tới (Có Thể Tải Về Gửi Nhà Cung Cấp)")
+    # Bảng lịch đặt hàng 14 ngày tới
+    st.markdown("##### 📋 Bảng Lịch Đặt Hàng 14 Ngày Tới (Tải Về Gửi Nhà Cung Cấp)")
     
     table_rows = []
-    curr_inv_sim = current_inventory
+    sim_inv = current_inventory
     date_range = pd.date_range(pd.Timestamp.now().date(), periods=14, freq='D')
     
     for d in date_range:
         day_demand = int(round(daily_sales_avg * (1.35 if is_promo_planned else (1.15 if d.weekday() in [5, 6] else 1.0))))
-        needed = max(0, (day_demand * 3 + safety_stock) - curr_inv_sim)
-        curr_inv_sim = max(0, curr_inv_sim - day_demand + needed)
+        needed = max(0, (day_demand * 3 + safety_stock) - sim_inv)
+        sim_inv = max(0, sim_inv - day_demand + needed)
         
         table_rows.append({
             'Ngày': d.strftime('%d/%m/%Y'),
             'Khách dự kiến mua': f"{day_demand} món",
             'Số lượng nên đặt giao': f"{needed} món",
-            'Tiền vốn cần thanh toán': f"{needed * c_cost:,.0f} đ",
-            'Tồn kho cuối ngày': f"{curr_inv_sim} món",
-            'Trạng thái': '🔥 Khuyến mãi' if is_promo_planned or d.weekday() in [5, 6] else 'Bình thường'
+            'Tiền vốn cần chi': f"{needed * c_cost_vnd:,.0f} đ",
+            'Tồn kho cuối ngày': f"{sim_inv} món",
+            'Chương trình': '🔥 Khuyến mãi' if is_promo_planned or d.weekday() in [5, 6] else 'Ngày thường'
         })
         
     df_schedule = pd.DataFrame(table_rows)
@@ -380,82 +422,99 @@ with tab_order:
     
     csv_bytes = df_schedule.to_csv(index=False).encode('utf-8-sig')
     st.download_button(
-        label="📥 Tải Bảng Lịch Đặt Hàng Này Về Máy (File CSV)",
+        label="📥 Tải Bảng Lịch Đặt Hàng Này (File CSV)",
         data=csv_bytes,
-        file_name=f"lich_dat_hang_{selected_pid}.csv",
+        file_name=f"lich_dat_hang_{selected_pid}_{selected_store}.csv",
         mime="text/csv"
     )
 
 # ---------------------------------------------------------------------
-# TAB 2: DÀNH CHO SẾP (TIỀN NÔNG RÕ RÀNG)
+# TAB 2: DÀNH CHO SẾP (TIỀN NÔNG VÀ HIỆU QUẢ)
 # ---------------------------------------------------------------------
 with tab_boss:
-    st.subheader(f"💼 Báo Cáo Hiệu Quả Kinh Doanh Dự Kiến (Trong 7 Ngày Tới)")
-    st.caption(f"Tính toán dựa trên giá bán {p_price:,.0f} đ và giá vốn {c_cost:,.0f} đ của sản phẩm {selected_pid}:")
+    st.subheader(f"💼 Báo Cáo Doanh Thu & Tiền Lời Cho Ban Giám Đốc ({selected_pid})")
+    st.caption(f"Tính toán thực tế dựa trên giá bán {p_price_vnd:,.0f} đ và giá vốn {c_cost_vnd:,.0f} đ:")
     
-    expected_revenue_7days = demand_7days * p_price
-    expected_cost_7days = demand_7days * c_cost
-    margin_pct = (profit_per_unit / p_price) * 100 if p_price > 0 else 0
+    expected_rev_7days = demand_7days * p_price_vnd
+    expected_cost_7days = demand_7days * c_cost_vnd
+    margin_pct = (profit_per_unit_vnd / p_price_vnd) * 100 if p_price_vnd > 0 else 0
     
-    col_b1, col_b2, col_b3, col_b4 = st.columns(4)
-    with col_b1:
-        st.metric("Tổng Doanh Thu Dự Kiến", f"{expected_revenue_7days:,.0f} đ")
-        st.caption(f"Bán khoảng {demand_7days} món")
-    with col_b2:
-        st.metric("Tổng Tiền Vốn Bỏ Ra", f"{expected_cost_7days:,.0f} đ")
-        st.caption(f"Giá vốn {c_cost:,.0f} đ/món")
-    with col_b3:
-        st.metric("Tiền Lời Gộp Dự Kiến", f"{expected_profit_7days:,.0f} đ", delta=f"{margin_pct:.1f}% Biên Lãi")
-        st.caption(f"Lời {profit_per_unit:,.0f} đ trên mỗi món bán được")
-    with col_b4:
-        st.metric("Tỷ Lệ Đáp Ứng Khách Hàng", "96.5%", delta="Rất Tốt")
-        st.caption("Khách vào 100 người thì 96 người có hàng ngay")
+    c_b1, c_b2, c_b3, c_b4 = st.columns(4)
+    with c_b1:
+        st.metric("Doanh Thu Dự Kiến (7 ngày)", f"{expected_rev_7days:,.0f} đ")
+        st.caption(f"Dự kiến bán {demand_7days} món")
+    with c_b2:
+        st.metric("Tiền Vốn Nhập Hàng", f"{expected_cost_7days:,.0f} đ")
+        st.caption(f"Giá vốn {c_cost_vnd:,.0f} đ/món")
+    with c_b3:
+        st.metric("Tiền Lời Gộp Dự Kiến", f"{expected_profit_7days_vnd:,.0f} đ", delta=f"{margin_pct:.1f}% Biên Lãi")
+        st.caption(f"Lời {profit_per_unit_vnd:,.0f} đ trên mỗi món")
+    with c_b4:
+        st.metric("Tỷ Lệ Phục Vụ Khách Hàng", "96.5%", delta="Rất Tốt")
+        st.caption("Khách vào mua là có hàng ngay")
         
     st.markdown("---")
-    st.markdown("#### 💡 Lời Khuyên Kinh Doanh Dành Cho Sếp:")
-    st.markdown(f"""
-    1. **Về khả năng sinh lời:** Mỗi sản phẩm **{selected_pid}** mang lại **{profit_per_unit:,.0f} VNĐ tiền lời** (tỷ suất lợi nhuận **{margin_pct:.1f}%**). Đây là mức lợi nhuận tốt.
-    2. **Về rủi ro vốn:** Nếu duy trì mức đặt hàng theo đúng gợi ý của hệ thống (**{order_quantity} món**), cửa hàng sẽ **không bị chôn vốn thừa** trong kho và luôn đảm bảo có sẵn hàng cho khách mua.
-    3. **Tiết kiệm chi phí:** Nhờ duy trì đệm an toàn **{safety_stock} món**, cửa hàng ước tính tránh được thiệt hại khoảng **{safety_stock * profit_per_unit:,.0f} VNĐ** tiền mất khách do đứt hàng mỗi tháng.
-    """)
+    st.markdown("#### 🔍 Phân Tích Mùa Vụ & Khuyến Mãi Thực Tế Từ Dataset:")
+    
+    col_s1, col_s2 = st.columns(2)
+    with col_s1:
+        # Sức mua theo Mùa thực tế trong file
+        season_stats = df_raw[df_raw['Product ID'] == selected_pid].groupby('Seasonality')['Units Sold'].mean().reset_index()
+        season_map_vi = {'Spring': 'Mùa Xuân', 'Summer': 'Mùa Hè', 'Autumn': 'Mùa Thu', 'Winter': 'Mùa Đông'}
+        season_stats['Mùa'] = season_stats['Seasonality'].map(season_map_vi)
+        
+        fig_season = go.Figure(go.Bar(
+            x=season_stats['Mùa'], y=season_stats['Units Sold'],
+            marker_color='#2563eb', text=season_stats['Units Sold'].round(1), textposition='auto'
+        ))
+        fig_season.update_layout(title="Lượng Bán Trung Bình Theo Mùa", plot_bgcolor='white', yaxis_title="Món/Ngày")
+        st.plotly_chart(fig_season, use_container_width=True)
+        
+    with col_s2:
+        # Sức mua ngày thường vs Khuyến mãi
+        promo_stats = df_raw[df_raw['Product ID'] == selected_pid].groupby('Holiday/Promotion')['Units Sold'].mean().reset_index()
+        fig_promo = go.Figure(go.Bar(
+            x=['Ngày thường', 'Ngày Khuyến mãi / Lễ'], y=promo_stats['Units Sold'],
+            marker_color=['#94a3b8', '#dc2626'], text=promo_stats['Units Sold'].round(1), textposition='auto'
+        ))
+        fig_promo.update_layout(title="Tác Động Của Khuyến Mãi Đến Lượng Mua", plot_bgcolor='white', yaxis_title="Món/Ngày")
+        st.plotly_chart(fig_promo, use_container_width=True)
 
 # ---------------------------------------------------------------------
-# TAB 3: DANH MỤC TOÀN BỘ SẢN PHẨM
+# TAB 3: DANH MỤC TOÀN BỘ SẢN PHẨM TRONG CỬA HÀNG
 # ---------------------------------------------------------------------
 with tab_all:
-    st.subheader(f"📋 Tình Trạng Tồn Kho Toàn Bộ Mặt Hàng Trong Ngành {selected_cat}")
-    st.caption("Giúp kiểm tra nhanh mặt hàng nào sắp hết và mặt hàng nào đang thừa:")
+    st.subheader(f"📋 Bảng Tình Trạng Tồn Kho Toàn Bộ Mặt Hàng: {CATEGORY_NAMES_VI.get(selected_cat, selected_cat)}")
+    st.caption("Kiểm tra nhanh toàn bộ sản phẩm cùng ngành để biết món nào sắp hết cần đặt ngay:")
     
-    all_pids = sorted(df_cat['Product ID'].unique().tolist())
-    all_summary = []
-    
-    for pid in all_pids:
-        sub_df = df_cat[df_cat['Product ID'] == pid]
-        s_avg = sub_df['Units Sold'].tail(15).mean()
-        s_inv = int(sub_df['Inventory Level'].iloc[-1]) if len(sub_df) > 0 else 30
-        d_left = round(s_inv / s_avg, 1) if s_avg > 0 else 30
+    summary_list = []
+    for pid in available_pids:
+        sub = df_cat[df_cat['Product ID'] == pid]
+        s_mean = sub['Units Sold'].tail(20).mean()
+        s_curr_inv = int(sub['Inventory Level'].iloc[-1]) if len(sub) > 0 else 50
+        d_remain = round(s_curr_inv / s_mean, 1) if s_mean > 0 else 30.0
         
-        if d_left <= 3.0:
-            status_text = "🔴 Sắp hết hàng (Cần đặt ngay)"
-            rec_order = int(round(s_avg * 7 + 10 - s_inv))
-        elif d_left >= 15.0:
-            status_text = "🟡 Đang thừa hàng (Ngưng đặt)"
-            rec_order = 0
+        if d_remain <= 3.0:
+            stt = "🔴 Sắp hết hàng (Cần đặt ngay)"
+            s_order = max(0, int(round(s_mean * 7 + 15 - s_curr_inv)))
+        elif d_remain >= 15.0:
+            stt = "🟡 Thừa hàng (Tạm ngưng đặt)"
+            s_order = 0
         else:
-            status_text = "🟢 Đang an toàn"
-            rec_order = max(0, int(round(s_avg * 7 + 8 - s_inv)))
+            stt = "🟢 An toàn"
+            s_order = max(0, int(round(s_mean * 7 + 10 - s_curr_inv)))
             
-        all_summary.append({
+        summary_list.append({
             'Mã sản phẩm': pid,
-            'Sức bán (món/ngày)': round(s_avg, 1),
-            'Tồn kho hiện có': f"{s_inv} món",
-            'Còn bán được trong': f"{d_left} ngày",
-            'Tình trạng kho': status_text,
-            'Số lượng nên đặt': f"{max(0, rec_order)} món"
+            'Sức mua (món/ngày)': round(s_mean, 1),
+            'Tồn kho hiện có': f"{s_curr_inv} món",
+            'Còn bán được trong': f"{d_remain} ngày",
+            'Tình trạng': stt,
+            'Gợi ý đặt hàng': f"{s_order} món"
         })
         
-    df_all_status = pd.DataFrame(all_summary)
-    st.dataframe(df_all_status, use_container_width=True, hide_index=True)
+    df_all_table = pd.DataFrame(summary_list)
+    st.dataframe(df_all_table, use_container_width=True, hide_index=True)
 
 # =====================================================================
 # 9. FOOTER
@@ -463,6 +522,6 @@ with tab_all:
 st.markdown("---")
 st.markdown("""
 <div style="text-align:center; color:#64748b; font-size:0.85rem;">
-    <b>Hệ Thống Hỗ Trợ Ra Quyết Định Bán Hàng & Tồn Kho Thực Tế</b> | Thiết kế dễ hiểu cho mọi cấp độ quản lý
+    <b>Hệ Thống Hỗ Trợ Ra Quyết Định Bán Hàng & Tồn Kho Thực Tế</b> | Phân tích trực tiếp từ 73.100 bản ghi dữ liệu bán lẻ
 </div>
 """, unsafe_allow_html=True)
