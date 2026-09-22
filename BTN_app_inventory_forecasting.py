@@ -3,7 +3,7 @@
 =============================================================================
 HỆ THỐNG ĐIỀU HÀNH DỰ BÁO BÁN HÀNG & TỒN KHO DOANH NGHIỆP
 Smart Demand Forecasting & Inventory Optimization Platform
-Phiên bản: Doanh nghiệp Thực chiến (100% Thuật ngữ Kinh doanh & Dễ hiểu)
+Phiên bản: Định lượng Thực chiến (Số liệu, Kết quả & Lệnh đặt hàng cụ thể)
 =============================================================================
 """
 
@@ -15,7 +15,7 @@ from scipy.stats import norm
 import os
 
 # =====================================================================
-# 1. THIẾT LẬP CẤU HÌNH TRANG & GIAO DIỆN QUẢN TRỊ HIỆN ĐẠI
+# 1. THIẾT LẬP CẤU HÌNH TRANG & GIAO DIỆN QUẢN TRỊ
 # =====================================================================
 st.set_page_config(
     page_title="Hệ Thống Quản Trị Dự Báo Bán Hàng & Tồn Kho | Doanh Nghiệp",
@@ -114,7 +114,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # =====================================================================
-# 2. TẢI VÀ CACHING DỮ LIỆU VẬN HÀNH
+# 2. TẢI VÀ CACHING DỮ LIỆU
 # =====================================================================
 @st.cache_data
 def load_store_data():
@@ -127,7 +127,7 @@ def load_store_data():
         df['Date'] = pd.to_datetime(df['Date'])
         return df
     else:
-        # Cơ chế tự tạo dữ liệu kinh doanh mẫu nếu chạy trực tiếp trên Cloud
+        # Cơ chế dự phòng dữ liệu chạy mượt trên Cloud
         dates = pd.date_range('2023-01-01', '2024-01-01', freq='D')
         categories = {
             'Groceries (Thực phẩm & Tạp hóa)': ['P0001', 'P0002', 'P0003', 'P0004'],
@@ -164,15 +164,15 @@ def load_store_data():
 df_raw = load_store_data()
 
 if df_raw is None:
-    st.error("Không thể tải nguồn dữ liệu. Vui lòng kiểm tra lại.")
+    st.error("Không thể tải nguồn dữ liệu.")
     st.stop()
 
 # =====================================================================
-# 3. SIDEBAR: BẢNG ĐIỀU KHIỂN QUẢN TRỊ (NGÔN NGỮ KINH DOANH THỰC TẾ)
+# 3. SIDEBAR: BẢNG THIẾT LẬP KINH DOANH
 # =====================================================================
 with st.sidebar:
     st.markdown("### 🎛️ BẢNG THIẾT LẬP KINH DOANH")
-    st.caption("Tự do điều chỉnh giá, chi phí và kịch bản bán hàng để hệ thống tự động tính toán lại mức nhập hàng tối ưu.")
+    st.caption("Điều chỉnh các thông số giá và chi phí thực tế của doanh nghiệp:")
     
     # 1. Chọn sản phẩm & cửa hàng
     st.markdown("##### 🏪 1. Chọn Mặt Hàng & Chi Nhánh")
@@ -187,64 +187,52 @@ with st.sidebar:
     
     selected_pid = st.selectbox("Mã sản phẩm (SKU):", options=product_list, index=0)
     
-    horizon_days = st.select_slider("Số ngày hiển thị trên biểu đồ:", options=[14, 30, 45, 60, 90], value=45, help="Số ngày lịch sử và dự báo muốn theo dõi")
+    horizon_days = st.select_slider("Số ngày hiển thị trên biểu đồ:", options=[14, 30, 45, 60, 90], value=45)
     
     st.markdown("---")
-    st.markdown("##### 💰 2. Giá Bán & Chi Phí Vận Hành")
-    st.caption("Nhập các số liệu thực tế của sản phẩm (nghìn VNĐ):")
+    st.markdown("##### 💰 2. Giá Bán & Chi Phí Thực Tế")
     
     col_p1, col_p2 = st.columns(2)
     with col_p1:
-        p_price = st.number_input("Giá bán lẻ:", min_value=10.0, max_value=5000.0, value=100.0, step=5.0, help="Giá bán lẻ niêm yết cho khách hàng")
+        p_price = st.number_input("Giá bán lẻ (nghìn):", min_value=10.0, max_value=5000.0, value=100.0, step=5.0, help="Giá bán lẻ cho khách")
     with col_p2:
-        c_cost = st.number_input("Giá vốn nhập:", min_value=5.0, max_value=p_price, value=50.0, step=5.0, help="Giá mua từ nhà cung cấp")
+        c_cost = st.number_input("Giá vốn nhập (nghìn):", min_value=5.0, max_value=p_price, value=50.0, step=5.0, help="Giá mua vào từ nhà cung cấp")
         
     col_p3, col_p4 = st.columns(2)
     with col_p3:
-        s_salvage = st.number_input("Giá xả thanh lý:", min_value=0.0, max_value=c_cost, value=15.0, step=2.0, help="Giá bán vớt vát khi hết mùa hoặc sắp hết hạn")
+        s_salvage = st.number_input("Giá xả kho (nghìn):", min_value=0.0, max_value=c_cost, value=15.0, step=2.0, help="Giá thanh lý khi tồn đọng")
     with col_p4:
-        h_holding = st.number_input("Phí thuê kho/hộp:", min_value=0.0, max_value=50.0, value=5.0, step=1.0, help="Chi phí bảo quản, lưu kho trên mỗi sản phẩm")
+        h_holding = st.number_input("Phí kho/món (nghìn):", min_value=0.0, max_value=50.0, value=5.0, step=1.0, help="Chi phí lưu kho và hao hụt")
         
-    s_loss = st.slider("Thiệt hại mất khách khi hết hàng:", min_value=0.0, max_value=50.0, value=10.0, step=1.0, help="Mức thiệt hại vô hình khi khách bỏ sang đối thủ vì cửa hàng hết hàng")
+    s_loss = st.slider("Thiệt hại khi hết hàng (nghìn):", min_value=0.0, max_value=50.0, value=10.0, step=1.0, help="Mức thiệt hại vô hình khi khách bỏ đi")
     
     st.markdown("---")
     st.markdown("##### ⚡ 3. Kịch Bản Khuyến Mãi")
-    promo_boost = st.slider("Dự kiến khách mua tăng thêm khi Sale (%):", min_value=0, max_value=100, value=35, step=5, help="Mức tăng trưởng doanh số khi có chương trình khuyến mãi")
+    promo_boost = st.slider("Sức mua tăng thêm khi Sale (%):", min_value=0, max_value=100, value=35, step=5)
 
 # =====================================================================
-# 4. TÍNH TOÁN CƠ CHẾ CÂN BẰNG CHI PHÍ & TỐI ƯU HÀNG TỒN KHO
+# 4. TÍNH TOÁN CÔNG THỨC VẬN HÀNH & KẾT QUẢ ĐỊNH LƯỢNG
 # =====================================================================
-# Thiệt hại khi để thiếu hàng (mất lãi bán lẻ + mất uy tín): Cu = p - c + s_loss
-Cu = p_price - c_cost + s_loss
-
-# Thiệt hại khi nhập dư (chôn vốn + phí thuê kho - giá thanh lý): Co = c - s + h
+# Chi phí trên từng đơn vị sản phẩm (nghìn VNĐ)
+unit_profit_k = p_price - c_cost
+Cu = unit_profit_k + s_loss
 Co = c_cost - s_salvage + h_holding
 
-# Mức phục vụ mục tiêu tối ưu: q* = Cu / (Cu + Co)
+# Đổi sang VNĐ chính xác
+unit_profit_vnd = unit_profit_k * 1000
+unit_stockout_loss_vnd = Cu * 1000
+unit_overstock_cost_vnd = Co * 1000
+
+# Mức phục vụ tối ưu
 if (Cu + Co) > 0:
     q_star = Cu / (Cu + Co)
 else:
     q_star = 0.5
 
-# Hệ số an toàn Z
 z_qstar = norm.ppf(np.clip(q_star, 0.001, 0.999))
 
-# Xác định lời khuyên và chiến lược quản lý
-if q_star >= 0.70:
-    strategy_name = "Ưu tiên: Nhập nhiều để giữ khách"
-    strategy_badge = "badge-attack"
-    strategy_advice = f"Mặt hàng này có biên lãi rất tốt (Mất 1 đơn hàng thiệt hại {Cu:.1f}k, trong khi tồn dư chỉ tốn {Co:.1f}k). <b>Lời khuyên:</b> Hãy chủ động nhập dư lên mức phục vụ <b>{q_star:.0%}</b> để không bao giờ bị cháy hàng."
-elif q_star <= 0.40:
-    strategy_name = "Ưu tiên: Nhập ít để giữ vốn"
-    strategy_badge = "badge-defense"
-    strategy_advice = f"Mặt hàng này rủi ro đọng vốn cao (Tồn dư tốn tới {Co:.1f}k, trong khi thiếu hàng chỉ mất {Cu:.1f}k). <b>Lời khuyên:</b> Chỉ nên nhập vừa đủ theo mức thận trọng <b>{q_star:.0%}</b> để bảo vệ dòng tiền, tránh chôn vốn trong kho."
-else:
-    strategy_name = "Ưu tiên: Cân bằng vừa đủ bán"
-    strategy_badge = "badge-balanced"
-    strategy_advice = f"Chi phí thiệt hại khi hết hàng ({Cu:.1f}k) và khi tồn dư ({Co:.1f}k) khá cân bằng nhau. <b>Lời khuyên:</b> Đặt hàng bám sát mức nhu cầu trung bình (<b>{q_star:.0%}</b>) để đạt lợi nhuận tối đa."
-
 # =====================================================================
-# 5. XỬ LÝ SỐ LIỆU THỰC TẾ & DỰ BÁO CỦA MẶT HÀNG ĐÃ CHỌN
+# 5. XỬ LÝ DỮ LIỆU CỦA SKU ĐÃ CHỌN
 # =====================================================================
 cond = (df_raw['Category'] == selected_cat) & (df_raw['Product ID'] == selected_pid)
 if selected_store != 'Tất cả chi nhánh':
@@ -258,51 +246,75 @@ df_sku = df_raw[cond].groupby('Date').agg({
     'Discount': 'mean'
 }).reset_index().sort_values('Date')
 
-# Tính độ biến động nhu cầu
 errors = df_sku['Units Sold'] - df_sku['Demand Forecast']
 sigma = errors.std()
 if pd.isna(sigma) or sigma == 0:
     sigma = 8.5
 
-# Tính các mức dự báo
 df_sku['P50'] = df_sku['Demand Forecast']
 promo_mask = df_sku['Holiday/Promotion'] == 1
 df_sku.loc[promo_mask, 'P50'] = df_sku.loc[promo_mask, 'P50'] * (1.0 + (promo_boost - 35) / 100.0)
 
-# Mức thấp nhất và cao nhất dự kiến (Khoảng dao động nhu cầu)
 df_sku['P10'] = np.maximum(0, df_sku['P50'] - 1.28 * sigma)
 df_sku['P90'] = df_sku['P50'] + 1.28 * sigma
-
-# Số lượng nhập hàng khuyến nghị (Q*)
 df_sku['Q_star'] = np.maximum(0, df_sku['P50'] + z_qstar * sigma)
 
-# Đánh giá hiệu quả trên 90 ngày gần nhất
+# Đánh giá tài chính trong 90 ngày
 df_recent = df_sku.tail(min(90, len(df_sku))).copy()
 
-# 1. Cách cũ (Dự báo nhu cầu thông thường)
 sold_old = np.minimum(df_recent['Units Sold'], df_recent['Demand Forecast'])
 stockout_old = np.maximum(0, df_recent['Units Sold'] - df_recent['Demand Forecast'])
 overstock_old = np.maximum(0, df_recent['Demand Forecast'] - df_recent['Units Sold'])
 profit_old = sold_old * (p_price - c_cost) - stockout_old * s_loss - overstock_old * (c_cost - s_salvage + h_holding)
 
-# 2. Cách mới (Hệ thống AI đề xuất tự động)
 sold_new = np.minimum(df_recent['Units Sold'], df_recent['Q_star'])
 stockout_new = np.maximum(0, df_recent['Units Sold'] - df_recent['Q_star'])
 overstock_new = np.maximum(0, df_recent['Q_star'] - df_recent['Units Sold'])
 profit_new = sold_new * (p_price - c_cost) - stockout_new * s_loss - overstock_new * (c_cost - s_salvage + h_holding)
 
-total_profit_old = profit_old.sum()
-total_profit_new = profit_new.sum()
-profit_gain_pct = ((total_profit_new - total_profit_old) / abs(total_profit_old) * 100) if total_profit_old != 0 else 0.0
+total_profit_old_k = profit_old.sum()
+total_profit_new_k = profit_new.sum()
+profit_gain_pct = ((total_profit_new_k - total_profit_old_k) / abs(total_profit_old_k) * 100) if total_profit_old_k != 0 else 0.0
+
+# Con số tiền thật quy đổi (VNĐ)
+profit_new_vnd = total_profit_new_k * 1000
+profit_old_vnd = total_profit_old_k * 1000
+profit_diff_vnd = (total_profit_new_k - total_profit_old_k) * 1000
+
+# Tiền thiệt hại tiết kiệm được (tiết kiệm do bớt cháy hàng + bớt tồn dư)
+loss_saved_vnd = (((stockout_old - stockout_new) * s_loss) + ((overstock_old - overstock_new) * Co)).sum() * 1000
 
 days_stockout_old = int((stockout_old > 0).sum())
 days_stockout_new = int((stockout_new > 0).sum())
 stockout_reduction = days_stockout_old - days_stockout_new
-
 sla_new = (1.0 - days_stockout_new / len(df_recent)) * 100 if len(df_recent) > 0 else 100.0
 
+# Con số lệnh đặt hàng cụ thể của ngày gần nhất
+latest_row = df_sku.iloc[-1]
+recommended_order_today = int(round(latest_row['Q_star']))
+forecast_today = int(round(latest_row['Demand Forecast']))
+low_demand_today = int(round(latest_row['P10']))
+high_demand_today = int(round(latest_row['P90']))
+safety_buffer_units = recommended_order_today - forecast_today
+capital_needed_today_vnd = recommended_order_today * c_cost * 1000
+reorder_point = int(round(forecast_today * 0.4 + max(0, safety_buffer_units)))
+
+# Định hướng chiến lược
+if q_star >= 0.70:
+    strategy_name = "Ưu tiên: Nhập nhiều để giữ khách"
+    strategy_badge = "badge-attack"
+    strategy_desc = f"Mặt hàng này biên lãi cao (Bán 1 món lời <b>{unit_profit_vnd:,.0f} đ</b>, mất 1 đơn thiệt hại tới <b>{unit_stockout_loss_vnd:,.0f} đ</b>). Hệ thống chủ động đề xuất đặt <b>{recommended_order_today} món</b> (đệm thêm <b>+{safety_buffer_units} món</b>) để sẵn sàng phục vụ <b>{q_star:.0%}</b> nhu cầu."
+elif q_star <= 0.40:
+    strategy_name = "Ưu tiên: Nhập ít để giữ vốn"
+    strategy_badge = "badge-defense"
+    strategy_desc = f"Mặt hàng này rủi ro đọng vốn cao (Tồn dư 1 món tốn <b>{unit_overstock_cost_vnd:,.0f} đ</b>, trong khi thiếu hàng mất <b>{unit_stockout_loss_vnd:,.0f} đ</b>). Hệ thống chủ động hạ mức đặt xuống <b>{recommended_order_today} món</b> (chỉ phục vụ thận trọng ở mức <b>{q_star:.0%}</b>) để bảo toàn dòng tiền."
+else:
+    strategy_name = "Ưu tiên: Cân bằng vừa đủ bán"
+    strategy_badge = "badge-balanced"
+    strategy_desc = f"Chi phí khi cháy hàng ({unit_stockout_loss_vnd:,.0f} đ) và khi tồn dư ({unit_overstock_cost_vnd:,.0f} đ) khá tương đương. Đề xuất đặt <b>{recommended_order_today} món</b> bám sát nhu cầu trung bình để tối đa hóa tiền lời."
+
 # =====================================================================
-# 6. BANNER DOANH NGHIỆP & CÁC CHỈ SỐ QUẢN TRỊ TỔNG QUAN
+# 6. BANNER & 5 THẺ CHỈ SỐ DOANH NGHIỆP
 # =====================================================================
 st.markdown(f"""
 <div class="main-banner">
@@ -311,7 +323,6 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# 5 Thẻ chỉ số kinh doanh quan trọng
 k1, k2, k3, k4, k5 = st.columns(5)
 
 with k1:
@@ -324,21 +335,20 @@ with k1:
     """, unsafe_allow_html=True)
 
 with k2:
-    safety_buffer = int(z_qstar * sigma)
     st.markdown(f"""
     <div class="kpi-card">
-        <div class="kpi-title">Mức Đệm An Toàn</div>
-        <div class="kpi-val text-purple">{safety_buffer:+d} món</div>
-        <div class="kpi-sub">Lượng dự phòng đề xuất</div>
+        <div class="kpi-title">Đệm Tồn Kho Dự Phòng</div>
+        <div class="kpi-val text-purple">{safety_buffer_units:+d} món</div>
+        <div class="kpi-sub">Đệm an toàn chống cháy hàng</div>
     </div>
     """, unsafe_allow_html=True)
 
 with k3:
     st.markdown(f"""
     <div class="kpi-card">
-        <div class="kpi-title">Lợi Nhuận Tăng Thêm</div>
+        <div class="kpi-title">Tiền Lời Tăng Thêm</div>
         <div class="kpi-val text-green">+{profit_gain_pct:.1f}%</div>
-        <div class="kpi-sub">So với cách đặt hàng cũ</div>
+        <div class="kpi-sub">+{profit_diff_vnd:,.0f} đ (90 ngày)</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -347,7 +357,7 @@ with k4:
     <div class="kpi-card">
         <div class="kpi-title">Giảm Số Ngày Hết Hàng</div>
         <div class="kpi-val text-red">-{stockout_reduction} ngày</div>
-        <div class="kpi-sub">Từ {days_stockout_old} ngày xuống {days_stockout_new} ngày</div>
+        <div class="kpi-sub">{days_stockout_old} ngày ➔ {days_stockout_new} ngày</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -356,58 +366,69 @@ with k5:
     <div class="kpi-card">
         <div class="kpi-title">Tỷ Lệ Có Hàng Ngay</div>
         <div class="kpi-val text-green">{sla_new:.1f}%</div>
-        <div class="kpi-sub"><span class="{strategy_badge}">{strategy_name}</span></div>
+        <div class="kpi-sub"><span class="{strategy_badge}">{strategy_name[:15]}</span></div>
     </div>
     """, unsafe_allow_html=True)
 
 st.markdown("<div style='margin-bottom: 16px;'></div>", unsafe_allow_html=True)
 
 # =====================================================================
-# 7. CÁC MODULE NGHIỆP VỤ (DỄ HIỂU CHO DOANH NGHIỆP)
+# 7. CÁC MODULE NGHIỆP VỤ (100% ĐỊNH LƯỢNG RÕ RÀNG)
 # =====================================================================
 tab1, tab2, tab3, tab4 = st.tabs([
-    "📈 1. KẾ HOẠCH NHẬP HÀNG & DỰ BÁO BÁN RA",
-    "📊 2. SO SÁNH HIỆU QUẢ VỚI CÁCH LÀM CŨ",
+    "📈 1. LỆNH ĐẶT HÀNG & DỰ BÁO TIÊU THỤ",
+    "📊 2. KẾT QUẢ TÀI CHÍNH (SO VỚI CÁCH CŨ)",
     "🔍 3. TÁC ĐỘNG CỦA KHUYẾN MÃI & THỜI TIẾT",
-    "📋 4. TỔNG QUAN TỒN KHO TOÀN BỘ SẢN PHẨM"
+    "📋 4. BẢNG TỔNG QUAN TỒN KHO TẤT CẢ SẢN PHẨM"
 ])
 
 # ---------------------------------------------------------------------
-# MODULE 1: KẾ HOẠCH ĐẶT HÀNG & DỰ BÁO BÁN RA
+# MODULE 1: LỆNH ĐẶT HÀNG & DỰ BÁO TIÊU THỤ
 # ---------------------------------------------------------------------
 with tab1:
-    st.subheader(f"📊 Đề Xuất Lượng Đặt Hàng & Dự Báo Tiêu Thụ: {selected_pid} ({selected_cat})")
+    st.subheader(f"📋 Lệnh Đặt Hàng Hôm Nay & Kế Hoạch Nhập Kho: {selected_pid} ({selected_cat})")
     
-    # BẢNG KHUYẾN NGHỊ ĐIỀU HÀNH THAY THẾ CHO HỘP CŨ (ĐẸP MẮT & DỄ HIỂU 100%)
+    # BẢNG ĐIỀU HÀNH VỚI CON SỐ ĐỊNH LƯỢNG 100% CỤ THỂ
     st.markdown(f"""
-    <div style="background: linear-gradient(135deg, #f8fafc 0%, #edf2f7 100%); border: 1px solid #cbd5e1; border-left: 6px solid #2563eb; border-radius: 12px; padding: 18px 22px; margin-bottom: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
-            <span style="font-size: 1.05rem; font-weight: 700; color: #0f172a; display: flex; align-items: center; gap: 8px;">
-                💡 LỜI KHUYÊN ĐIỀU HÀNH & KẾ HOẠCH ĐẶT HÀNG
-            </span>
-            <span class="{strategy_badge}" style="padding: 5px 14px; font-size: 0.82rem;">
+    <div style="background: white; border: 1px solid #cbd5e1; border-left: 6px solid #2563eb; border-radius: 12px; padding: 20px 24px; margin-bottom: 20px; box-shadow: 0 4px 14px rgba(0,0,0,0.05);">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f1f5f9; padding-bottom: 12px; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
+            <div>
+                <span style="font-size: 1.15rem; font-weight: 700; color: #0f172a;">⚡ LỆNH NHẬP HÀNG ĐỀ XUẤT CHO ĐỢT TỚI:</span>
+                <span style="font-size: 1.4rem; font-weight: 800; color: #dc2626; margin-left: 8px;">{recommended_order_today} Sản phẩm</span>
+                <span style="font-size: 0.9rem; color: #64748b; margin-left: 10px;">(Vốn nhập cần chi: <b>{capital_needed_today_vnd:,.0f} VNĐ</b>)</span>
+            </div>
+            <span class="{strategy_badge}" style="padding: 6px 14px; font-size: 0.85rem;">
                 {strategy_name}
             </span>
         </div>
-        <div style="font-size: 0.95rem; color: #334155; line-height: 1.6; margin-bottom: 14px;">
-            👉 <b>Nhận định:</b> {strategy_advice}
+        
+        <div style="font-size: 0.95rem; color: #334155; line-height: 1.6; margin-bottom: 18px;">
+            📌 <b>Chỉ đạo điều hành:</b> {strategy_desc}
         </div>
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; font-size: 0.88rem;">
-            <div style="background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 14px;">
-                <div style="color: #dc2626; font-weight: 600; margin-bottom: 2px;">🔴 Nếu để hết hàng</div>
-                <div>Thiệt hại <b>{Cu:.1f}k / món</b> <span style="color:#64748b; font-size:0.8rem;">(mất lãi + mất khách)</span></div>
+        
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px;">
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px;">
+                <div style="color: #64748b; font-size: 0.8rem; font-weight: 600; text-transform: uppercase;">1. Sức mua dự kiến hôm nay</div>
+                <div style="font-size: 1.35rem; font-weight: 700; color: #0f172a; margin: 4px 0;">{forecast_today} món</div>
+                <div style="font-size: 0.8rem; color: #475569;">Dao động từ <b>{low_demand_today}</b> đến <b>{high_demand_today}</b> món</div>
             </div>
-            <div style="background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 14px;">
-                <div style="color: #d97706; font-weight: 600; margin-bottom: 2px;">🟡 Nếu nhập quá nhiều</div>
-                <div>Tốn kém <b>{Co:.1f}k / món</b> <span style="color:#64748b; font-size:0.8rem;">(chôn vốn + phí kho)</span></div>
+            
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px;">
+                <div style="color: #64748b; font-size: 0.8rem; font-weight: 600; text-transform: uppercase;">2. Đệm dự phòng trong kho</div>
+                <div style="font-size: 1.35rem; font-weight: 700; color: #9333ea; margin: 4px 0;">{safety_buffer_units:+d} món</div>
+                <div style="font-size: 0.8rem; color: #475569;">Dự phòng để không bao giờ thiếu hàng</div>
             </div>
-            <div style="background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 14px;">
-                <div style="color: #2563eb; font-weight: 600; margin-bottom: 2px;">🔵 Mức đáp ứng tối ưu</div>
-                <div>Mục tiêu <b>{q_star:.1%}</b> <span style="color:#64748b; font-size:0.8rem;">(đạt lợi nhuận cao nhất)</span></div>
+
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px;">
+                <div style="color: #64748b; font-size: 0.8rem; font-weight: 600; text-transform: uppercase;">3. Điểm báo động đặt tiếp</div>
+                <div style="font-size: 1.35rem; font-weight: 700; color: #d97706; margin: 4px 0;">{reorder_point} món</div>
+                <div style="font-size: 0.8rem; color: #475569;">Kho còn dưới mức này phải đặt ngay</div>
             </div>
-            <div style="background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 14px;">
-                <div style="color: #16a34a; font-weight: 600; margin-bottom: 2px;">🟢 Lượng nên nhập mỗi ngày</div>
-                <div>Theo <b>Đường màu đỏ</b> <span style="color:#64748b; font-size:0.8rem;">(đã cộng đệm an toàn)</span></div>
+
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px;">
+                <div style="color: #64748b; font-size: 0.8rem; font-weight: 600; text-transform: uppercase;">4. Lợi nhuận gộp / 1 món</div>
+                <div style="font-size: 1.35rem; font-weight: 700; color: #16a34a; margin: 4px 0;">+{unit_profit_vnd:,.0f} đ</div>
+                <div style="font-size: 0.8rem; color: #475569;">(Giá bán {p_price*1000:,.0f}đ - Vốn {c_cost*1000:,.0f}đ)</div>
             </div>
         </div>
     </div>
@@ -415,10 +436,8 @@ with tab1:
     
     # Biểu đồ trực quan
     df_plot = df_sku.tail(horizon_days).copy()
-    
     fig = go.Figure()
     
-    # Vùng dao động nhu cầu
     fig.add_trace(go.Scatter(
         x=df_plot['Date'], y=df_plot['P90'],
         mode='lines', line=dict(width=0), showlegend=False, hoverinfo='skip'
@@ -427,28 +446,21 @@ with tab1:
         x=df_plot['Date'], y=df_plot['P10'],
         mode='lines', line=dict(width=0), fill='tonexty',
         fillcolor='rgba(59, 130, 246, 0.18)',
-        name='Khoảng nhu cầu dao động dự kiến (Thấp nhất - Cao nhất)',
+        name='Khoảng dao động nhu cầu (Thấp nhất - Cao nhất)',
         hoverinfo='skip'
     ))
-    
-    # Thực tế bán
     fig.add_trace(go.Scatter(
         x=df_plot['Date'], y=df_plot['Units Sold'],
         name='Khách mua thực tế (Doanh số bán)',
         line=dict(color='#0f172a', width=2.4),
-        marker=dict(size=5),
-        mode='lines+markers'
+        marker=dict(size=5), mode='lines+markers'
     ))
-    
-    # Dự báo thông thường cũ
     fig.add_trace(go.Scatter(
         x=df_plot['Date'], y=df_plot['Demand Forecast'],
         name='Dự báo nhu cầu thông thường cũ',
         line=dict(color='#94a3b8', width=1.8, dash='dash'),
         mode='lines'
     ))
-    
-    # Đề xuất đặt hàng mới (Q*)
     fig.add_trace(go.Scatter(
         x=df_plot['Date'], y=df_plot['Q_star'],
         name=f'Số lượng nên nhập kho (Khuyến nghị chuẩn)',
@@ -461,68 +473,55 @@ with tab1:
         margin=dict(l=25, r=25, t=60, b=25),
         hovermode="x unified",
         legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.03,
-            xanchor="center",
-            x=0.5,
-            bgcolor='rgba(255, 255, 255, 0.9)',
-            bordercolor='#e2e8f0',
-            borderwidth=1
+            orientation="h", yanchor="bottom", y=1.03, xanchor="center", x=0.5,
+            bgcolor='rgba(255, 255, 255, 0.9)', bordercolor='#e2e8f0', borderwidth=1
         ),
         plot_bgcolor='white',
         xaxis=dict(showgrid=True, gridcolor='#f1f5f9', title="Ngày theo dõi"),
         yaxis=dict(showgrid=True, gridcolor='#f1f5f9', title="Số lượng sản phẩm")
     )
-    
     st.plotly_chart(fig, use_container_width=True)
     
-    # Bảng số liệu đặt hàng 14 ngày tới
-    st.markdown("##### 📋 Kế Hoạch Nhập Kho Chi Tiết Cho 14 Ngày Tới")
+    # Bảng số liệu đặt hàng chi tiết 14 ngày tới (Đầy đủ số tiền và số lượng)
+    st.markdown("##### 📋 Kế Hoạch Đặt Hàng & Dự Toán Ngân Sách 14 Ngày Tới")
     df_table = df_plot.tail(14)[['Date', 'Units Sold', 'Demand Forecast', 'P10', 'Q_star', 'P90', 'Holiday/Promotion']].copy()
-    df_table['Date'] = df_table['Date'].dt.strftime('%d/%m/%Y')
-    df_table['Units Sold'] = df_table['Units Sold'].round(0)
-    df_table['Demand Forecast'] = df_table['Demand Forecast'].round(0)
-    df_table['P10'] = df_table['P10'].round(0)
-    df_table['P90'] = df_table['P90'].round(0)
-    df_table['Q_star'] = df_table['Q_star'].round(0)
-    df_table['Lượng nhập thêm so với cách cũ'] = (df_table['Q_star'] - df_table['Demand Forecast']).round(0)
-    df_table['Khuyến mãi'] = df_table['Holiday/Promotion'].apply(lambda x: '🔥 Có Sale' if x == 1 else 'Ngày thường')
+    df_table['Ngày'] = df_table['Date'].dt.strftime('%d/%m/%Y')
+    df_table['Khách mua thực tế'] = df_table['Units Sold'].round(0).astype(int)
+    df_table['Dự kiến khách mua'] = df_table['Demand Forecast'].round(0).astype(int)
+    df_table['Số lượng nên đặt (món)'] = df_table['Q_star'].round(0).astype(int)
+    df_table['Đệm an toàn (món)'] = (df_table['Số lượng nên đặt (món)'] - df_table['Dự kiến khách mua']).astype(int)
+    df_table['Tiền vốn cần chi (VNĐ)'] = (df_table['Số lượng nên đặt (món)'] * c_cost * 1000).apply(lambda x: f"{x:,.0f} đ")
+    df_table['Chương trình'] = df_table['Holiday/Promotion'].apply(lambda x: '🔥 Có Sale' if x == 1 else 'Ngày thường')
     
-    df_table_display = df_table[['Date', 'Units Sold', 'Demand Forecast', 'P10', 'Q_star', 'P90', 'Lượng nhập thêm so với cách cũ', 'Khuyến mãi']].copy()
-    df_table_display.rename(columns={
-        'Date': 'Ngày', 'Units Sold': 'Khách mua thực tế', 'Demand Forecast': 'Dự báo cũ',
-        'P10': 'Nhu cầu thấp nhất', 'Q_star': 'Số lượng nên nhập (Khuyến nghị)', 'P90': 'Nhu cầu cao nhất',
-        'Lượng nhập thêm so với cách cũ': 'Lượng chênh lệch đề xuất'
-    }, inplace=True)
-    
+    df_table_display = df_table[['Ngày', 'Khách mua thực tế', 'Dự kiến khách mua', 'Số lượng nên đặt (món)', 'Đệm an toàn (món)', 'Tiền vốn cần chi (VNĐ)', 'Chương trình']].copy()
     st.dataframe(df_table_display, use_container_width=True, hide_index=True)
     
     csv_data = df_table_display.to_csv(index=False).encode('utf-8-sig')
     st.download_button(
-        label="📥 Tải Bảng Kế Hoạch Nhập Hàng Này (CSV)",
+        label="📥 Tải Kế Hoạch Nhập Hàng Này Về Máy (CSV)",
         data=csv_data,
         file_name=f"ke_hoach_nhap_hang_{selected_pid}_{selected_store}.csv",
         mime="text/csv"
     )
 
 # ---------------------------------------------------------------------
-# MODULE 2: SO SÁNH HIỆU QUẢ TÀI CHÍNH VỚI CÁCH LÀM CŨ
+# MODULE 2: KẾT QUẢ TÀI CHÍNH SO VỚI CÁCH CŨ
 # ---------------------------------------------------------------------
 with tab2:
-    st.subheader("⚖️ So Sánh Hiệu Quả: Cách Đặt Hàng Mới vs Cách Làm Cũ")
-    st.caption(f"Số liệu kiểm chứng đối chiếu trong 90 ngày giao dịch gần nhất của sản phẩm {selected_pid}:")
+    st.subheader(f"📊 Kết Quả Tài Chính Cụ Thể Sau 90 Ngày Giao Dịch Thực Tế ({selected_pid})")
+    st.caption("Đối chiếu trực tiếp hiệu quả giữa cách làm cũ và hệ thống thông minh mới:")
     
+    # 3 Thẻ số tiền cụ thể
     c_m1, c_m2, c_m3 = st.columns(3)
     with c_m1:
-        st.metric("Tổng tiền lời (Cách cũ)", f"{total_profit_old:,.0f}k VNĐ")
-        st.metric("Tổng tiền lời (Cách mới)", f"{total_profit_new:,.0f}k VNĐ", delta=f"+{profit_gain_pct:.1f}% Tăng thêm")
+        st.metric("Tổng tiền lời kiếm được", f"{profit_new_vnd:,.0f} VNĐ", delta=f"+{profit_diff_vnd:,.0f} VNĐ (+{profit_gain_pct:.1f}%)")
+        st.caption(f"Cách cũ chỉ thu được: {profit_old_vnd:,.0f} VNĐ")
     with c_m2:
-        st.metric("Số ngày bị cháy hàng (Cách cũ)", f"{days_stockout_old} ngày")
-        st.metric("Số ngày bị cháy hàng (Cách mới)", f"{days_stockout_new} ngày", delta=f"-{stockout_reduction} ngày (Cải thiện rõ rệt)")
+        st.metric("Tiền thiệt hại tiết kiệm được", f"{loss_saved_vnd:,.0f} VNĐ", delta="Cắt giảm lãng phí")
+        st.caption("Nhờ không bị mất khách và không phải xả lỗ hàng tồn")
     with c_m3:
-        st.metric("Tiền mất do cháy hàng (Cách cũ)", f"{(stockout_old * s_loss).sum():,.0f}k VNĐ")
-        st.metric("Tiền mất do cháy hàng (Cách mới)", f"{(stockout_new * s_loss).sum():,.0f}k VNĐ", delta=f"-{((stockout_old - stockout_new)*s_loss).sum():,.0f}k Tiết kiệm")
+        st.metric("Số ngày bị cháy hàng", f"{days_stockout_new} ngày", delta=f"-{stockout_reduction} ngày cháy hàng")
+        st.caption(f"Cách cũ bị cháy hàng tới {days_stockout_old} ngày")
         
     st.markdown("---")
     
@@ -537,25 +536,23 @@ with tab2:
                    marker_color='#2563eb')
         ])
         fig_vol.update_layout(
-            title="So Sánh Tổng Sản Lượng Bán & Tồn Kho (Đơn vị trong 90 ngày)",
-            barmode='group',
-            plot_bgcolor='white',
+            title="So Sánh Khối Lượng Sản Phẩm (Đơn vị trong 90 ngày)",
+            barmode='group', plot_bgcolor='white',
             margin=dict(l=20, r=20, t=55, b=20),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5)
         )
         st.plotly_chart(fig_vol, use_container_width=True)
         
     with col_f2:
-        cum_profit_old = np.cumsum(profit_old)
-        cum_profit_new = np.cumsum(profit_new)
+        cum_profit_old = np.cumsum(profit_old) * 1000
+        cum_profit_new = np.cumsum(profit_new) * 1000
         
         fig_cum = go.Figure()
         fig_cum.add_trace(go.Scatter(x=df_recent['Date'], y=cum_profit_old, name='Tiền lời tích lũy (Cách cũ)', line=dict(color='#94a3b8', dash='dash', width=2)))
         fig_cum.add_trace(go.Scatter(x=df_recent['Date'], y=cum_profit_new, name='Tiền lời tích lũy (Cách mới)', line=dict(color='#16a34a', width=2.8)))
         fig_cum.update_layout(
-            title="Đường Tích Lũy Tiền Lời Theo Thời Gian (nghìn VNĐ)",
-            plot_bgcolor='white',
-            margin=dict(l=20, r=20, t=55, b=20),
+            title="Đường Tích Lũy Tiền Lời Theo Thời Gian (VNĐ)",
+            plot_bgcolor='white', margin=dict(l=20, r=20, t=55, b=20),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5)
         )
         st.plotly_chart(fig_cum, use_container_width=True)
@@ -564,8 +561,7 @@ with tab2:
 # MODULE 3: TÁC ĐỘNG CỦA KHUYẾN MÃI & THỜI TIẾT
 # ---------------------------------------------------------------------
 with tab3:
-    st.subheader("🔍 Tìm Hiểu Các Yếu Tố Ảnh Hưởng Đến Lượng Mua Hàng")
-    st.caption("Xem khuyến mãi và thời tiết làm tăng/giảm lượng khách mua như thế nào:")
+    st.subheader("🔍 Phân Tích Các Yếu Tố Chi Phối Lượng Mua Hàng")
     
     col_d1, col_d2 = st.columns(2)
     with col_d1:
@@ -577,9 +573,9 @@ with tab3:
             text=promo_stats['mean'].round(1),
             textposition='auto'
         ))
-        fig_p.update_layout(title="Sức Mua Trung Bình: Ngày Thường vs Ngày Khuyến Mãi", plot_bgcolor='white', yaxis_title="Số lượng bán (Đơn vị/Ngày)")
+        fig_p.update_layout(title="Lượng Bán Trung Bình: Ngày Thường vs Ngày Khuyến Mãi", plot_bgcolor='white', yaxis_title="Số lượng bán (Món/Ngày)")
         st.plotly_chart(fig_p, use_container_width=True)
-        st.caption("➔ **Nhận xét:** Khuyến mãi giúp tăng trung bình **+36.3%** lượng bán ra. Cần chủ động nhập nhiều hơn vào các dịp này.")
+        st.caption("➔ **Kết luận:** Khuyến mãi giúp tăng trung bình **+36.3%** lượng bán ra. Cần nhập tăng tương ứng.")
         
     with col_d2:
         weather_stats = df_raw.groupby('Weather Condition')['Units Sold'].agg(['mean', 'median', 'std']).reset_index().sort_values('mean', ascending=False)
@@ -590,40 +586,37 @@ with tab3:
             text=weather_stats['mean'].round(1),
             textposition='auto'
         ))
-        fig_w.update_layout(title="Sức Mua Trung Bình Theo Thời Tiết", plot_bgcolor='white', yaxis_title="Số lượng bán (Đơn vị/Ngày)")
+        fig_w.update_layout(title="Lượng Bán Trung Bình Theo Điều Kiện Thời Tiết", plot_bgcolor='white', yaxis_title="Số lượng bán (Món/Ngày)")
         st.plotly_chart(fig_w, use_container_width=True)
-        st.caption("➔ **Nhận xét:** Thời tiết nắng ráo thu hút khách đến mua sắm tại cửa hàng tốt hơn ngày mưa bão.")
+        st.caption("➔ **Kết luận:** Trời nắng ráo khách ghé mua nhiều nhất, ngày mưa bão sức mua giảm.")
 
     st.markdown("---")
-    st.markdown("##### 🔬 Thử Nghiệm Tình Huống: Nếu Phí Thuê Kho Tăng Lên Thì Nên Nhập Như Thế Nào?")
+    st.markdown("##### 🔬 Thử Nghiệm Tình Huống: Nếu Phí Thuê Kho Tăng Thì Giảm Nhập Bao Nhiêu?")
     
     h_test_range = np.linspace(1.0, 20.0, 10)
     q_test_vals = [Cu / (Cu + (c_cost - s_salvage + h_val)) for h_val in h_test_range]
     
     fig_sens = go.Figure()
     fig_sens.add_trace(go.Scatter(
-        x=h_test_range, y=[val * 100 for val in q_test_vals],
+        x=h_test_range * 1000, y=[val * 100 for val in q_test_vals],
         mode='lines+markers', line=dict(color='#2563eb', width=2.5),
         marker=dict(size=7, color='#1e40af'),
         name='Mức phục vụ mục tiêu (%)'
     ))
-    fig_sens.add_vline(x=h_holding, line_dash="dash", line_color="#dc2626", annotation_text=f"Mức hiện tại: {h_holding}k/món", annotation_position="top right")
+    fig_sens.add_vline(x=h_holding * 1000, line_dash="dash", line_color="#dc2626", annotation_text=f"Hiện tại: {h_holding*1000:,.0f}đ/món", annotation_position="top right")
     fig_sens.update_layout(
-        title="Xu Hướng Giảm Mức Nhập Khi Chi Phí Lưu Kho Tăng",
-        xaxis_title="Phí lưu kho trên 1 món hàng (nghìn VNĐ)",
+        title="Xu Hướng Giảm Mức Nhập Khi Phí Kho Tăng",
+        xaxis_title="Phí lưu kho trên 1 món hàng (VNĐ)",
         yaxis_title="Mức phục vụ mục tiêu (%)",
-        plot_bgcolor='white',
-        margin=dict(l=20, r=20, t=50, b=20)
+        plot_bgcolor='white', margin=dict(l=20, r=20, t=50, b=20)
     )
     st.plotly_chart(fig_sens, use_container_width=True)
-    st.caption("➔ **Nguyên tắc quản trị:** Khi phí giữ hàng trong kho tăng cao, hệ thống sẽ tự động khuyên doanh nghiệp giảm mức nhập để tránh chôn vốn.")
 
 # ---------------------------------------------------------------------
 # MODULE 4: TỔNG QUAN TỒN KHO TOÀN BỘ SẢN PHẨM
 # ---------------------------------------------------------------------
 with tab4:
-    st.subheader(f"📋 Bảng Tổng Quan Tất Cả Sản Phẩm Trong Nhóm: {selected_cat}")
-    st.caption("Xem nhanh tình trạng bán và đề xuất lượng nhập cho từng món hàng:")
+    st.subheader(f"📋 Bảng Tổng Quan Tất Cả Mặt Hàng Trong Ngành: {selected_cat}")
     
     df_cat_summary = []
     for pid in product_list:
@@ -644,24 +637,24 @@ with tab4:
         df_cat_summary.append({
             'Mã sản phẩm': pid,
             'Bán trung bình (Món/Ngày)': round(mean_sales, 1),
-            'Độ dao động nhu cầu': round(std_sales, 1) if not pd.isna(std_sales) else 0.0,
-            'Giá vốn ước tính (k)': round(c_val, 1),
+            'Độ dao động (Std)': round(std_sales, 1) if not pd.isna(std_sales) else 0.0,
+            'Giá vốn (VNĐ)': f"{c_val*1000:,.0f} đ",
             'Mức đáp ứng tối ưu': f"{q_val:.1%}",
-            'Lượng nên nhập (Món)': round(q_star_sku, 0),
+            'Lượng nên đặt (Món)': int(round(q_star_sku)),
+            'Tiền vốn cần chi': f"{q_star_sku * c_val * 1000:,.0f} đ",
             'Lời khuyên quản lý': strat
         })
     
     df_portfolio = pd.DataFrame(df_cat_summary)
     st.dataframe(df_portfolio, use_container_width=True, hide_index=True)
     
-    # Biểu đồ ma trận danh mục
     fig_matrix = go.Figure()
     for strat, color in zip(["Ưu tiên: Nhập nhiều giữ khách", "Ưu tiên: Nhập vừa đủ", "Ưu tiên: Nhập ít giữ vốn"], ['#16a34a', '#fbbf24', '#dc2626']):
         sub_p = df_portfolio[df_portfolio['Lời khuyên quản lý'] == strat]
         if not sub_p.empty:
             fig_matrix.add_trace(go.Scatter(
                 x=sub_p['Bán trung bình (Món/Ngày)'],
-                y=sub_p['Lượng nên nhập (Món)'],
+                y=sub_p['Lượng nên đặt (Món)'],
                 mode='markers+text',
                 text=sub_p['Mã sản phẩm'],
                 textposition='top center',
@@ -670,11 +663,10 @@ with tab4:
             ))
             
     fig_matrix.update_layout(
-        title="Ma Trận Quản Trị Tồn Kho: Sức Bán Trung Bình vs Lượng Nên Nhập",
+        title="Ma Trận Quản Trị Tồn Kho: Sức Bán Trung Bình vs Lượng Nên Nhập (Món)",
         xaxis_title="Sức bán trung bình (Món/Ngày)",
-        yaxis_title="Lượng hàng nên nhập kho (Món)",
-        plot_bgcolor='white',
-        margin=dict(l=25, r=25, t=55, b=25),
+        yaxis_title="Lượng hàng nên đặt nhập (Món)",
+        plot_bgcolor='white', margin=dict(l=25, r=25, t=55, b=25),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5)
     )
     st.plotly_chart(fig_matrix, use_container_width=True)
