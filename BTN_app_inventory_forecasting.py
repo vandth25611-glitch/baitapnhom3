@@ -281,7 +281,6 @@ profit_new_vnd = total_profit_new_k * 1000
 profit_old_vnd = total_profit_old_k * 1000
 profit_diff_vnd = (total_profit_new_k - total_profit_old_k) * 1000
 
-# Tiền thiệt hại tiết kiệm được (tiết kiệm do bớt cháy hàng + bớt tồn dư)
 loss_saved_vnd = (((stockout_old - stockout_new) * s_loss) + ((overstock_old - overstock_new) * Co)).sum() * 1000
 
 days_stockout_old = int((stockout_old > 0).sum())
@@ -388,51 +387,52 @@ tab1, tab2, tab3, tab4 = st.tabs([
 with tab1:
     st.subheader(f"📋 Lệnh Đặt Hàng Hôm Nay & Kế Hoạch Nhập Kho: {selected_pid} ({selected_cat})")
     
-    # BẢNG ĐIỀU HÀNH VỚI CON SỐ ĐỊNH LƯỢNG 100% CỤ THỂ
-    st.markdown(f"""
-    <div style="background: white; border: 1px solid #cbd5e1; border-left: 6px solid #2563eb; border-radius: 12px; padding: 20px 24px; margin-bottom: 20px; box-shadow: 0 4px 14px rgba(0,0,0,0.05);">
-        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f1f5f9; padding-bottom: 12px; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
-            <div>
-                <span style="font-size: 1.15rem; font-weight: 700; color: #0f172a;">⚡ LỆNH NHẬP HÀNG ĐỀ XUẤT CHO ĐỢT TỚI:</span>
-                <span style="font-size: 1.4rem; font-weight: 800; color: #dc2626; margin-left: 8px;">{recommended_order_today} Sản phẩm</span>
-                <span style="font-size: 0.9rem; color: #64748b; margin-left: 10px;">(Vốn nhập cần chi: <b>{capital_needed_today_vnd:,.0f} VNĐ</b>)</span>
-            </div>
-            <span class="{strategy_badge}" style="padding: 6px 14px; font-size: 0.85rem;">
-                {strategy_name}
-            </span>
-        </div>
-        
-        <div style="font-size: 0.95rem; color: #334155; line-height: 1.6; margin-bottom: 18px;">
-            📌 <b>Chỉ đạo điều hành:</b> {strategy_desc}
-        </div>
-        
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px;">
-            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px;">
-                <div style="color: #64748b; font-size: 0.8rem; font-weight: 600; text-transform: uppercase;">1. Sức mua dự kiến hôm nay</div>
-                <div style="font-size: 1.35rem; font-weight: 700; color: #0f172a; margin: 4px 0;">{forecast_today} món</div>
-                <div style="font-size: 0.8rem; color: #475569;">Dao động từ <b>{low_demand_today}</b> đến <b>{high_demand_today}</b> món</div>
-            </div>
-            
-            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px;">
-                <div style="color: #64748b; font-size: 0.8rem; font-weight: 600; text-transform: uppercase;">2. Đệm dự phòng trong kho</div>
-                <div style="font-size: 1.35rem; font-weight: 700; color: #9333ea; margin: 4px 0;">{safety_buffer_units:+d} món</div>
-                <div style="font-size: 0.8rem; color: #475569;">Dự phòng để không bao giờ thiếu hàng</div>
-            </div>
+    # 1. HỘP TIÊU ĐỀ LỆNH ĐẶT HÀNG (VIẾT LIỀN MẠCH, KHÔNG THỤT LỀ TRÁNH LỖI MARKDOWN)
+    st.markdown(f"""<div style="background: white; border: 1px solid #cbd5e1; border-left: 6px solid #2563eb; border-radius: 12px; padding: 18px 22px; margin-bottom: 16px; box-shadow: 0 4px 14px rgba(0,0,0,0.05);">
+<div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+<div>
+<span style="font-size: 1.1rem; font-weight: 700; color: #0f172a;">⚡ LỆNH NHẬP HÀNG ĐỀ XUẤT CHO ĐỢT TỚI:</span>
+<span style="font-size: 1.45rem; font-weight: 800; color: #dc2626; margin-left: 8px;">{recommended_order_today} Sản phẩm</span>
+<span style="font-size: 0.9rem; color: #64748b; margin-left: 10px;">(Vốn nhập cần chi: <b>{capital_needed_today_vnd:,.0f} VNĐ</b>)</span>
+</div>
+<span class="{strategy_badge}" style="padding: 6px 14px; font-size: 0.85rem;">{strategy_name}</span>
+</div>
+<div style="font-size: 0.95rem; color: #334155; line-height: 1.6; margin-top: 10px;">
+📌 <b>Chỉ đạo điều hành:</b> {strategy_desc}
+</div>
+</div>""", unsafe_allow_html=True)
+    
+    # 2. 4 Ô THÔNG SỐ ĐỊNH LƯỢNG (DÙNG STREAMLIT COLUMNS, HIỂN THỊ CHUẨN 100% KHÔNG LỖI)
+    o1, o2, o3, o4 = st.columns(4)
+    with o1:
+        st.markdown(f"""<div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; text-align: center;">
+<div style="color: #64748b; font-size: 0.78rem; font-weight: 600; text-transform: uppercase;">1. Sức mua hôm nay</div>
+<div style="font-size: 1.4rem; font-weight: 700; color: #0f172a; margin: 4px 0;">{forecast_today} món</div>
+<div style="font-size: 0.8rem; color: #475569;">Dao động {low_demand_today} - {high_demand_today} món</div>
+</div>""", unsafe_allow_html=True)
 
-            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px;">
-                <div style="color: #64748b; font-size: 0.8rem; font-weight: 600; text-transform: uppercase;">3. Điểm báo động đặt tiếp</div>
-                <div style="font-size: 1.35rem; font-weight: 700; color: #d97706; margin: 4px 0;">{reorder_point} món</div>
-                <div style="font-size: 0.8rem; color: #475569;">Kho còn dưới mức này phải đặt ngay</div>
-            </div>
+    with o2:
+        st.markdown(f"""<div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; text-align: center;">
+<div style="color: #64748b; font-size: 0.78rem; font-weight: 600; text-transform: uppercase;">2. Đệm dự phòng an toàn</div>
+<div style="font-size: 1.4rem; font-weight: 700; color: #9333ea; margin: 4px 0;">{safety_buffer_units:+d} món</div>
+<div style="font-size: 0.8rem; color: #475569;">Chống sốc khi khách mua tăng</div>
+</div>""", unsafe_allow_html=True)
 
-            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px;">
-                <div style="color: #64748b; font-size: 0.8rem; font-weight: 600; text-transform: uppercase;">4. Lợi nhuận gộp / 1 món</div>
-                <div style="font-size: 1.35rem; font-weight: 700; color: #16a34a; margin: 4px 0;">+{unit_profit_vnd:,.0f} đ</div>
-                <div style="font-size: 0.8rem; color: #475569;">(Giá bán {p_price*1000:,.0f}đ - Vốn {c_cost*1000:,.0f}đ)</div>
-            </div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    with o3:
+        st.markdown(f"""<div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; text-align: center;">
+<div style="color: #64748b; font-size: 0.78rem; font-weight: 600; text-transform: uppercase;">3. Điểm báo động đặt tiếp</div>
+<div style="font-size: 1.4rem; font-weight: 700; color: #d97706; margin: 4px 0;">{reorder_point} món</div>
+<div style="font-size: 0.8rem; color: #475569;">Kho dưới mức này phải đặt ngay</div>
+</div>""", unsafe_allow_html=True)
+
+    with o4:
+        st.markdown(f"""<div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; text-align: center;">
+<div style="color: #64748b; font-size: 0.78rem; font-weight: 600; text-transform: uppercase;">4. Lợi nhuận gộp / món</div>
+<div style="font-size: 1.4rem; font-weight: 700; color: #16a34a; margin: 4px 0;">+{unit_profit_vnd:,.0f} đ</div>
+<div style="font-size: 0.8rem; color: #475569;">Giá {p_price*1000:,.0f}đ - Vốn {c_cost*1000:,.0f}đ</div>
+</div>""", unsafe_allow_html=True)
+    
+    st.markdown("<div style='margin-bottom: 16px;'></div>", unsafe_allow_html=True)
     
     # Biểu đồ trực quan
     df_plot = df_sku.tail(horizon_days).copy()
