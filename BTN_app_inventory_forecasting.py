@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """
 =============================================================================
-HỆ THỐNG DỰ BÁO DOANH SỐ & ĐIỀU HÀNH TỒN KHO THỜI GIAN THỰC
-Môn học: Các mô hình dự báo trong Kinh doanh | GVHD: TS. Trần Duy Thanh
-Nhóm học viên thực hiện: Lâm Thanh Hiền (Trưởng nhóm), Đỗ Thị Kim Anh, Lưu Thị Huỳnh Như, Đào Thị Hồng Vân
-Dữ liệu thực nghiệm: Retail Store Inventory Forecasting Dataset (Kaggle - 73.100 bản ghi)
+HỆ THỐNG ĐIỀU HÀNH DỰ BÁO NHU CẦU & TỐI ƯU HÀNG TỒN KHO DOANH NGHIỆP
+Enterprise Demand Forecasting & Inventory Optimization Platform
+Phiên bản: Doanh nghiệp (Enterprise Production Edition)
+Tích hợp: Dự báo xác suất (Quantile Forecasting) & Lý thuyết Newsvendor
 =============================================================================
 """
 
@@ -16,46 +16,46 @@ from scipy.stats import norm
 import os
 
 # =====================================================================
-# 1. THIẾT LẬP CẤU HÌNH TRANG & GIAO DIỆN (STREAMLIT PREMIUM)
+# 1. THIẾT LẬP CẤU HÌNH TRANG & GIAO DIỆN DOANH NGHIỆP (ENTERPRISE UI)
 # =====================================================================
 st.set_page_config(
-    page_title="Dự Báo Doanh Số & Tối Ưu Hàng Tồn Kho | Nhóm TS. Trần Duy Thanh",
+    page_title="Hệ Thống Dự Báo Nhu Cầu & Tối Ưu Tồn Kho | Enterprise SaaS",
     page_icon="📦",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS cho phong cách quản trị cao cấp
+# Custom CSS cho phong cách Dashboard Quản trị Doanh nghiệp Hiện đại
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
     html, body, [class*="css"] {
         font-family: 'Inter', sans-serif;
     }
-    .main-header {
+    .enterprise-header {
         background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #1e3a8a 100%);
         padding: 24px 30px;
-        border-radius: 14px;
+        border-radius: 12px;
         color: white;
         margin-bottom: 22px;
         box-shadow: 0 4px 18px rgba(0, 0, 0, 0.12);
     }
-    .main-header h1 {
+    .enterprise-header h1 {
         font-size: 1.85rem;
         font-weight: 700;
         margin: 0;
         letter-spacing: -0.5px;
     }
-    .main-header p {
-        font-size: 0.95rem;
+    .enterprise-header p {
+        font-size: 0.92rem;
         color: #cbd5e1;
         margin-top: 6px;
         margin-bottom: 0;
     }
     .kpi-card {
         background: white;
-        border-radius: 12px;
-        padding: 16px 20px;
+        border-radius: 10px;
+        padding: 16px 18px;
         border: 1px solid #e2e8f0;
         box-shadow: 0 2px 8px rgba(0,0,0,0.04);
         text-align: center;
@@ -66,14 +66,14 @@ st.markdown("""
         box-shadow: 0 6px 16px rgba(0,0,0,0.08);
     }
     .kpi-title {
-        font-size: 0.82rem;
+        font-size: 0.80rem;
         font-weight: 600;
         text-transform: uppercase;
         color: #64748b;
         letter-spacing: 0.5px;
     }
     .kpi-val {
-        font-size: 1.7rem;
+        font-size: 1.65rem;
         font-weight: 700;
         color: #0f172a;
         margin: 4px 0;
@@ -114,10 +114,11 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # =====================================================================
-# 2. TẢI VÀ CACHING BỘ DỮ LIỆU KAGGLE
+# 2. TẢI VÀ CACHING BỘ DỮ LIỆU BÁN LẺ DOANH NGHIỆP
 # =====================================================================
 @st.cache_data
-def load_kaggle_dataset():
+def load_inventory_data():
+    """Tải dữ liệu vận hành tồn kho từ tệp nén hoặc cơ chế tự sinh dữ liệu dự phòng."""
     if os.path.exists("retail_store_inventory.csv.gz"):
         df = pd.read_csv("retail_store_inventory.csv.gz")
         df['Date'] = pd.to_datetime(df['Date'])
@@ -127,7 +128,7 @@ def load_kaggle_dataset():
         df['Date'] = pd.to_datetime(df['Date'])
         return df
     else:
-        # Cơ chế tự sinh dữ liệu dự phòng nếu chưa kịp upload file CSV lên GitHub
+        # Cơ chế dự phòng đảm bảo ứng dụng luôn chạy mượt mà trên môi trường Cloud
         dates = pd.date_range('2023-01-01', '2024-01-01', freq='D')
         categories = {
             'Groceries': ['P0001', 'P0002', 'P0003', 'P0004'],
@@ -139,21 +140,21 @@ def load_kaggle_dataset():
         stores = ['S001', 'S002', 'S003', 'S004', 'S005']
         rows = []
         np.random.seed(42)
-        recent_dates = dates[-60:]
+        recent_dates = dates[-90:]
         for d in recent_dates:
             is_promo = 1 if d.weekday() in [5, 6] or np.random.rand() < 0.15 else 0
             weather = np.random.choice(['Sunny', 'Cloudy', 'Rainy'], p=[0.5, 0.3, 0.2])
             for cat, pids in categories.items():
                 for pid in pids:
                     for s in stores:
-                        base = 50.0 + (int(pid[-2:]) % 5) * 5
-                        promo_eff = 16.0 if is_promo else 0.0
-                        rain_eff = -8.0 if weather == 'Rainy' else 0.0
+                        base = 50.0 + (int(pid[-2:]) % 5) * 6
+                        promo_eff = 16.5 if is_promo else 0.0
+                        rain_eff = -7.5 if weather == 'Rainy' else 0.0
                         forecast = base + promo_eff + rain_eff
                         sold = max(10, int(forecast + np.random.normal(0, 8)))
                         rows.append({
                             'Date': d, 'Store ID': s, 'Product ID': pid, 'Category': cat, 'Region': 'South',
-                            'Inventory Level': sold + 20, 'Units Sold': sold, 'Units Ordered': sold + 15,
+                            'Inventory Level': sold + 25, 'Units Sold': sold, 'Units Ordered': sold + 18,
                             'Demand Forecast': round(forecast, 1), 'Price': 100.0, 'Discount': 0.1 if is_promo else 0.0,
                             'Weather Condition': weather, 'Holiday/Promotion': is_promo, 'Competitor Pricing': 95.0,
                             'Seasonality': 1.0
@@ -161,163 +162,165 @@ def load_kaggle_dataset():
         df = pd.DataFrame(rows)
         return df
 
-df_raw = load_kaggle_dataset()
+df_raw = load_inventory_data()
 
 if df_raw is None:
+    st.error("Không thể khởi tạo nguồn dữ liệu vận hành. Vui lòng kiểm tra lại cấu hình.")
     st.stop()
 
 # =====================================================================
-# 3. SIDEBAR: BỘ ĐIỀU KHIỂN THAM SỐ KINH DOANH (TỰ DO THAY ĐỔI SỐ LIỆU)
+# 3. SIDEBAR: BẢNG ĐIỀU KHIỂN TÁC NGHIỆP DOANH NGHIỆP
 # =====================================================================
 with st.sidebar:
-    st.image("https://img.icons8.com/fluency/96/shop.png", width=55)
-    st.markdown("### 🎛️ BỘ ĐIỀU KHIỂN THAM SỐ")
-    st.caption("Thay đổi các con số kinh doanh dưới đây để quan sát biểu đồ dự báo và ngưỡng tồn kho thay đổi tức thì.")
+    st.markdown("### 🎛️ BẢNG ĐIỀU KHIỂN TÁC NGHIỆP")
+    st.caption("Thiết lập phạm vi vận hành và các tham số kinh tế để cập nhật ngưỡng đặt hàng tồn kho thời gian thực.")
     
-    # 1. Chọn sản phẩm và cửa hàng
+    # 1. Bộ lọc phạm vi vận hành
+    st.markdown("##### 🏪 Phạm Vi Sản Phẩm & Kho Vận")
     category_list = sorted(df_raw['Category'].unique().tolist())
-    selected_cat = st.selectbox("1. Ngành hàng:", options=category_list, index=category_list.index('Groceries') if 'Groceries' in category_list else 0)
+    selected_cat = st.selectbox("Ngành hàng mục tiêu:", options=category_list, index=category_list.index('Groceries') if 'Groceries' in category_list else 0)
     
     df_cat = df_raw[df_raw['Category'] == selected_cat]
     product_list = sorted(df_cat['Product ID'].unique().tolist())
     
-    store_list = ['Tất cả cửa hàng'] + sorted(df_raw['Store ID'].unique().tolist())
-    selected_store = st.selectbox("2. Chi nhánh cửa hàng:", options=store_list, index=1 if len(store_list) > 1 else 0)
+    store_list = ['Tất cả chi nhánh'] + sorted(df_raw['Store ID'].unique().tolist())
+    selected_store = st.selectbox("Chi nhánh phân phối:", options=store_list, index=1 if len(store_list) > 1 else 0)
     
-    selected_pid = st.selectbox("3. Mã sản phẩm (SKU):", options=product_list, index=0)
+    selected_pid = st.selectbox("Mã sản phẩm (SKU):", options=product_list, index=0)
+    
+    # Khung thời gian phân tích
+    horizon_days = st.select_slider("Khung thời gian phân tích:", options=[14, 30, 45, 60, 90], value=45, help="Số ngày lịch sử và dự báo hiển thị trên biểu đồ tác nghiệp")
     
     st.markdown("---")
-    st.markdown("#### 💰 THAM SỐ TÀI CHÍNH (NEWSVENDOR)")
-    st.caption("Sếp hoặc người dùng nhập tự do các tham số giá & chi phí:")
+    st.markdown("##### 💰 Tham Số Tài Chính & Chi Phí (Newsvendor)")
+    st.caption("Cấu hình chi phí biên để xác định tỷ số phục vụ tối ưu:")
     
     col_p1, col_p2 = st.columns(2)
     with col_p1:
-        p_price = st.number_input("Giá bán lẻ (p):", min_value=10.0, max_value=5000.0, value=100.0, step=5.0, help="Giá bán lẻ niêm yết (nghìn VNĐ)")
+        p_price = st.number_input("Giá bán lẻ (p):", min_value=10.0, max_value=5000.0, value=100.0, step=5.0, help="Giá bán niêm yết (nghìn VNĐ/đơn vị)")
     with col_p2:
-        c_cost = st.number_input("Giá vốn (c):", min_value=5.0, max_value=p_price, value=50.0, step=5.0, help="Giá nhập hàng vào kho (nghìn VNĐ)")
+        c_cost = st.number_input("Giá vốn (c):", min_value=5.0, max_value=p_price, value=50.0, step=5.0, help="Giá nhập kho (nghìn VNĐ/đơn vị)")
         
     col_p3, col_p4 = st.columns(2)
     with col_p3:
-        s_salvage = st.number_input("Giá thanh lý (s):", min_value=0.0, max_value=c_cost, value=15.0, step=2.0, help="Giá vớt vát khi bán ế / hết date")
+        s_salvage = st.number_input("Giá thanh lý (s):", min_value=0.0, max_value=c_cost, value=15.0, step=2.0, help="Giá thu hồi khi xả kho/hết mùa")
     with col_p4:
-        h_holding = st.number_input("Phí lưu kho (h):", min_value=0.0, max_value=50.0, value=5.0, step=1.0, help="Chi phí bảo quản, lưu kho trên 1 đơn vị")
+        h_holding = st.number_input("Phí lưu kho (h):", min_value=0.0, max_value=50.0, value=5.0, step=1.0, help="Chi phí tồn trữ, hao hụt (nghìn VNĐ/đơn vị)")
         
-    s_loss = st.slider("Chi phí mất uy tín khi hết hàng (s_loss):", min_value=0.0, max_value=50.0, value=10.0, step=1.0, help="Thiệt hại cơ hội khi khách bỏ sang đối thủ")
+    s_loss = st.slider("Thiệt hại mất uy tín khi đứt hàng (s_loss):", min_value=0.0, max_value=50.0, value=10.0, step=1.0, help="Thiệt hại cơ hội khi khách hàng rời bỏ sang đối thủ")
     
     st.markdown("---")
-    st.markdown("#### ⚡ KỊCH BẢN KHUYẾN MÃI NGOẠI SINH")
-    promo_boost = st.slider("Mức tăng trưởng khi có Khuyến mãi (%):", min_value=0, max_value=100, value=35, step=5, help="Giả lập sốc nhu cầu khi chạy chiến dịch sale")
+    st.markdown("##### ⚡ Kịch Bản Nhu Cầu Thị Trường")
+    promo_boost = st.slider("Tỷ lệ tăng trưởng khi có Khuyến mãi (%):", min_value=0, max_value=100, value=35, step=5, help="Độ co giãn nhu cầu dự kiến trong đợt kích cầu")
 
 # =====================================================================
-# 4. TÍNH TOÁN CÔNG THỨC TOÁN HỌC NEWSVENDOR & PHÂN VỊ TỚI HẠN
+# 4. TÍNH TOÁN CÔNG THỨC TOÁN HỌC & ĐIỂM TỚI HẠN NEWSVENDOR
 # =====================================================================
-# Chi phí thiếu hàng cận biên (Underage Cost)
+# Chi phí thiếu hàng cận biên (Underage Cost): Cu = p - c + s_loss
 Cu = p_price - c_cost + s_loss
 
-# Chi phí thừa hàng cận biên (Overage Cost)
+# Chi phí thừa hàng cận biên (Overage Cost): Co = c - s + h
 Co = c_cost - s_salvage + h_holding
 
-# Tỷ số phân vị tới hạn tối ưu (Critical Fractile)
+# Tỷ số phân vị tới hạn tối ưu (Critical Fractile): q* = Cu / (Cu + Co)
 if (Cu + Co) > 0:
     q_star = Cu / (Cu + Co)
 else:
     q_star = 0.5
 
-# Tính hệ số Z tương ứng trong phân phối chuẩn
+# Hệ số an toàn Z tương ứng trong hàm phân phối tích lũy chuẩn
 z_qstar = norm.ppf(np.clip(q_star, 0.001, 0.999))
 
-# Xác định chiến lược quản trị
+# Phân loại chiến lược quản trị tồn kho doanh nghiệp
 if q_star >= 0.70:
-    strategy_name = "Tấn công (bảo vệ doanh số)"
+    strategy_name = "Tấn công (Bảo vệ doanh số)"
     strategy_badge = "badge-attack"
-    strategy_desc = f"Biên lãi cao (Cu={Cu:.1f} > Co={Co:.1f}). Cần nâng tồn kho lên phân vị P{int(q_star*100)} để triệt tiêu đứt hàng."
+    strategy_desc = f"Biên lãi cao (Cu={Cu:.1f} > Co={Co:.1f}). Cần nâng tồn kho lên phân vị P{int(q_star*100)} để triệt tiêu nguy cơ đứt hàng."
 elif q_star <= 0.40:
-    strategy_name = "Phòng thủ (chống tồn kho)"
+    strategy_name = "Phòng thủ (Chống tồn đọng)"
     strategy_badge = "badge-defense"
-    strategy_desc = f"Rủi ro ứ vốn lớn (Co={Co:.1f} > Cu={Cu:.1f}). Cần hạ mức tồn kho xuống P{int(q_star*100)} để chống tồn đọng."
+    strategy_desc = f"Rủi ro đọng vốn cao (Co={Co:.1f} > Cu={Cu:.1f}). Cần hạ mức tồn kho xuống P{int(q_star*100)} để bảo toàn dòng tiền."
 else:
-    strategy_name = "Cân bằng tối ưu chi phí"
+    strategy_name = "Cân bằng chi phí tối ưu"
     strategy_badge = "badge-balanced"
-    strategy_desc = f"Chi phí thiếu hàng và thừa hàng tương đương nhau. Đặt hàng tiệm cận trung vị P{int(q_star*100)}."
+    strategy_desc = f"Chi phí thiếu hàng và thừa hàng cân bằng. Đặt hàng tiệm cận trung vị P{int(q_star*100)}."
 
 # =====================================================================
-# 5. XỬ LÝ DỮ LIỆU THỜI GIAN THỰC CỦA SKU ĐÃ CHỌN
+# 5. XỬ LÝ DỮ LIỆU VẬN HÀNH THỜI GIAN THỰC CỦA SKU ĐÃ CHỌN
 # =====================================================================
 cond = (df_raw['Category'] == selected_cat) & (df_raw['Product ID'] == selected_pid)
-if selected_store != 'Tất cả cửa hàng':
+if selected_store != 'Tất cả chi nhánh':
     cond = cond & (df_raw['Store ID'] == selected_store)
 
 df_sku = df_raw[cond].groupby('Date').agg({
     'Units Sold': 'sum',
-    'Demand Forecast': 'sum',
+    'Demand Forecast': 'mean',
     'Holiday/Promotion': 'max',
-    'Price': 'mean'
+    'Price': 'mean',
+    'Discount': 'mean'
 }).reset_index().sort_values('Date')
 
-# Tính độ lệch chuẩn sai số thực tế để dựng dải bất định DeepAR (P10 - P90)
-residuals = df_sku['Units Sold'] - df_sku['Demand Forecast']
-sigma = float(np.std(residuals))
-if sigma < 2.0: 
-    sigma = 8.0
+# Tính độ lệch chuẩn sai số dự báo (Forecast Error Volatility)
+errors = df_sku['Units Sold'] - df_sku['Demand Forecast']
+sigma = errors.std()
+if pd.isna(sigma) or sigma == 0:
+    sigma = 8.5
 
-# Tính dải phân vị xác suất
-df_sku['P10'] = np.maximum(0, df_sku['Demand Forecast'] - 1.28 * sigma)
+# Tính các phân vị dự báo xác suất động
 df_sku['P50'] = df_sku['Demand Forecast']
-df_sku['P90'] = df_sku['Demand Forecast'] + 1.28 * sigma
+# Điều chỉnh tác động khuyến mãi theo kịch bản tùy chọn
+promo_mask = df_sku['Holiday/Promotion'] == 1
+df_sku.loc[promo_mask, 'P50'] = df_sku.loc[promo_mask, 'P50'] * (1.0 + (promo_boost - 35) / 100.0)
 
-# Tính Ngưỡng đặt hàng tối ưu Q* thay đổi động theo tham số người dùng nhập
-# Nếu ngày có khuyến mại, cộng thêm mức tăng trưởng người dùng chọn
-promo_factor = 1.0 + (df_sku['Holiday/Promotion'] * (promo_boost / 100.0))
-df_sku['Q_star'] = np.maximum(0, (df_sku['P50'] * promo_factor) + z_qstar * sigma)
+df_sku['P10'] = np.maximum(0, df_sku['P50'] - 1.28 * sigma)
+df_sku['P90'] = df_sku['P50'] + 1.28 * sigma
 
-# Mô phỏng kinh tế 90 ngày gần nhất
-df_recent = df_sku.tail(90).copy().reset_index(drop=True)
+# Ngưỡng đặt hàng tối ưu tác nghiệp Q* theo tỷ số phân vị tới hạn q*
+df_sku['Q_star'] = np.maximum(0, df_sku['P50'] + z_qstar * sigma)
 
-# Hiệu quả Hệ thống cũ (Dự báo điểm)
+# Mô phỏng kiểm định Back-testing tài chính
+df_recent = df_sku.tail(min(90, len(df_sku))).copy()
+
+# Phương pháp 1: Hệ thống Cũ (Dự báo điểm cố định)
 sold_old = np.minimum(df_recent['Units Sold'], df_recent['Demand Forecast'])
 stockout_old = np.maximum(0, df_recent['Units Sold'] - df_recent['Demand Forecast'])
 overstock_old = np.maximum(0, df_recent['Demand Forecast'] - df_recent['Units Sold'])
-profit_old = sold_old * (p_price - c_cost) - overstock_old * (c_cost - s_salvage + h_holding) - stockout_old * s_loss
+profit_old = sold_old * (p_price - c_cost) - stockout_old * s_loss - overstock_old * (c_cost - s_salvage + h_holding)
 
-# Hiệu quả Mô hình Newsvendor Q* Mới
+# Phương pháp 2: Mô hình Mới (Tối ưu Newsvendor xác suất)
 sold_new = np.minimum(df_recent['Units Sold'], df_recent['Q_star'])
 stockout_new = np.maximum(0, df_recent['Units Sold'] - df_recent['Q_star'])
 overstock_new = np.maximum(0, df_recent['Q_star'] - df_recent['Units Sold'])
-profit_new = sold_new * (p_price - c_cost) - overstock_new * (c_cost - s_salvage + h_holding) - stockout_new * s_loss
+profit_new = sold_new * (p_price - c_cost) - stockout_new * s_loss - overstock_new * (c_cost - s_salvage + h_holding)
 
+# Tính toán các chỉ số KPI so sánh
 total_profit_old = profit_old.sum()
 total_profit_new = profit_new.sum()
-profit_gain_pct = ((total_profit_new - total_profit_old) / abs(total_profit_old)) * 100 if total_profit_old != 0 else 0
+profit_gain_pct = ((total_profit_new - total_profit_old) / abs(total_profit_old) * 100) if total_profit_old != 0 else 0.0
+
 days_stockout_old = int((stockout_old > 0).sum())
 days_stockout_new = int((stockout_new > 0).sum())
 stockout_reduction = days_stockout_old - days_stockout_new
-sla_new = (1 - (days_stockout_new / len(df_recent))) * 100
+
+sla_new = (1.0 - days_stockout_new / len(df_recent)) * 100 if len(df_recent) > 0 else 100.0
 
 # =====================================================================
-# 6. HEADER CHÍNH
+# 6. HEADER VÀ BANNER CHỈ SỐ DOANH NGHIỆP TỔNG QUAN
 # =====================================================================
-st.markdown("""
-<div class="main-header">
-    <div style="display:flex; justify-content:space-between; align-items:center;">
-        <div>
-            <h1>📦 HỆ THỐNG DỰ BÁO DOANH SỐ & TỐI ƯU HÀNG TỒN KHO</h1>
-            <p>Ứng dụng Mô hình Dự báo Xác suất Phân vị & Tối ưu hóa Newsvendor trên Dữ liệu Bán lẻ Thực nghiệm (Kaggle)</p>
-        </div>
-        <div style="text-align:right;">
-            <span style="background:rgba(255,255,255,0.15); padding:6px 14px; border-radius:20px; font-size:0.85rem; font-weight:600;">
-                Môn: Dự báo trong Kinh doanh | GV: TS. Trần Duy Thanh
-            </span>
-        </div>
-    </div>
+st.markdown(f"""
+<div class="enterprise-header">
+    <h1>📦 HỆ THỐNG ĐIỀU HÀNH DỰ BÁO NHU CẦU & TỐI ƯU TỒN KHO</h1>
+    <p>Nền tảng hỗ trợ ra quyết định chuỗi cung ứng | Phân tích SKU: <b>{selected_pid}</b> ({selected_cat}) | Địa điểm: <b>{selected_store}</b></p>
 </div>
 """, unsafe_allow_html=True)
 
-# KPI CARDS HÀNG ĐẦU
+# 5 Thẻ chỉ số KPI thời gian thực
 k1, k2, k3, k4, k5 = st.columns(5)
+
 with k1:
     st.markdown(f"""
     <div class="kpi-card">
-        <div class="kpi-title">Tỷ số Phân vị Tới hạn (q*)</div>
+        <div class="kpi-title">Phân Vị Tới Hạn (q*)</div>
         <div class="kpi-val text-blue">{q_star:.1%}</div>
         <div class="kpi-sub">Cu / (Cu + Co)</div>
     </div>
@@ -326,7 +329,7 @@ with k1:
 with k2:
     st.markdown(f"""
     <div class="kpi-card">
-        <div class="kpi-title">Hệ số Z An toàn</div>
+        <div class="kpi-title">Hệ Số An Toàn Z</div>
         <div class="kpi-val text-purple">{z_qstar:+.2f}</div>
         <div class="kpi-sub">Phân vị P{int(q_star*100)}</div>
     </div>
@@ -335,7 +338,7 @@ with k2:
 with k3:
     st.markdown(f"""
     <div class="kpi-card">
-        <div class="kpi-title">Tăng trưởng Lợi nhuận</div>
+        <div class="kpi-title">Tăng Lợi Nhuận Gộp</div>
         <div class="kpi-val text-green">+{profit_gain_pct:.1f}%</div>
         <div class="kpi-sub">So với dự báo điểm cũ</div>
     </div>
@@ -344,47 +347,54 @@ with k3:
 with k4:
     st.markdown(f"""
     <div class="kpi-card">
-        <div class="kpi-title">Cắt giảm Đứt hàng</div>
+        <div class="kpi-title">Giảm Số Ngày Đứt Hàng</div>
         <div class="kpi-val text-red">-{stockout_reduction} ngày</div>
-        <div class="kpi-sub">Từ {days_stockout_old} ngày xuống {days_stockout_new} ngày</div>
+        <div class="kpi-sub">{days_stockout_old} ngày ➔ {days_stockout_new} ngày</div>
     </div>
     """, unsafe_allow_html=True)
 
 with k5:
     st.markdown(f"""
     <div class="kpi-card">
-        <div class="kpi-title">Tỷ lệ Phục vụ (SLA)</div>
+        <div class="kpi-title">Tỷ Lệ Đáp Ứng (SLA)</div>
         <div class="kpi-val text-green">{sla_new:.1f}%</div>
-        <div class="kpi-sub"><span class="{strategy_badge}">{strategy_name[:12]}</span></div>
+        <div class="kpi-sub"><span class="{strategy_badge}">{strategy_name}</span></div>
     </div>
     """, unsafe_allow_html=True)
 
 st.markdown("<div style='margin-bottom: 18px;'></div>", unsafe_allow_html=True)
 
 # =====================================================================
-# 7. CÁC TABS NGHIÊN CỨU & ĐIỀU HÀNH
+# 7. CÁC MODULE NGHIỆP VỤ DOANH NGHIỆP CHUYÊN SÂU
 # =====================================================================
 tab1, tab2, tab3, tab4 = st.tabs([
-    "📈 1. BIỂU ĐỒ DỰ BÁO DOANH SỐ & NGƯỠNG TỒN KHO TƯƠNG TÁC",
-    "⚖️ 2. ĐỐI SÁNH TÀI CHÍNH CHI TIẾT: CŨ (DỰ BÁO ĐIỂM) VS MỚI (NEWSVENDOR AI)",
-    "🔍 3. KHÁM PHÁ YẾU TỐ CHI PHỐI DOANH SỐ: KHUYẾN MÃI & THỜI TIẾT",
-    "📑 4. BÁO CÁO TÓM TẮT TIỂU LUẬN & ĐỀ CƯƠNG THUYẾT TRÌNH"
+    "📈 1. DỰ BÁO NHU CẦU & KẾ HOẠCH ĐẶT HÀNG (REPLENISHMENT)",
+    "⚖️ 2. PHÂN TÍCH HIỆU QUẢ TÀI CHÍNH & VẬN HÀNH (BACK-TESTING)",
+    "🔍 3. ĐỘNG LỰC THỊ TRƯỜNG & PHÂN TÍCH ĐỘ NHẠY (SENSITIVITY)",
+    "📋 4. QUẢN TRỊ DANH MỤC & SỨC KHỎE TỒN KHO ĐA SKU (PORTFOLIO)"
 ])
 
 # ---------------------------------------------------------------------
-# TAB 1: BIỂU ĐỒ DỰ BÁO & NGƯỠNG TỒN KHO
+# MODULE 1: DỰ BÁO NHU CẦU & KẾ HOẠCH ĐẶT HÀNG TỒN KHO
 # ---------------------------------------------------------------------
 with tab1:
-    st.subheader(f"📊 Dải Băng Dự Báo Doanh Số & Kế Hoạch Tồn Kho: SKU {selected_pid} ({selected_cat})")
-    st.info(f"💡 **Cơ chế phản hồi trực quan:** Bạn vừa điều chỉnh giá bán p = {p_price}k, giá vốn c = {c_cost}k ➔ Phân vị tối ưu là **q* = {q_star:.1%}**. Đường viền đỏ đậm **Ngưỡng tồn kho Q*** đã tự động dịch chuyển tương ứng để đạt lợi nhuận cực đại!")
+    st.subheader(f"📊 Giám Sát Nhu Cầu & Ngưỡng Đặt Hàng Tác Nghiệp: {selected_pid} ({selected_cat})")
     
-    # Vẽ biểu đồ Plotly Fan Chart
-    tail_days = 45
-    df_plot = df_sku.tail(tail_days).copy()
+    # Hộp thông báo cơ chế ra quyết định tự động
+    st.info(f"""
+    💡 **Cơ chế định tuyến tồn kho thông minh:** 
+    Với cơ cấu chi phí hiện tại (Giá bán $p = {p_price:.0f}k$, Giá vốn $c = {c_cost:.0f}k$), 
+    chi phí thiếu hàng $C_u = {Cu:.1f}k$ và chi phí thừa hàng $C_o = {Co:.1f}k$. 
+    Hệ thống xác lập mức phân vị phục vụ mục tiêu **$q^* = {q_star:.1%}$** (Hệ số an toàn $Z = {z_qstar:+.2f}$). 
+    Đường viền đỏ **Ngưỡng đặt hàng tối ưu $Q^*$** tự động cân chỉnh để tối đa hóa lợi nhuận kỳ vọng.
+    """)
+    
+    # Chuẩn bị dữ liệu hiển thị biểu đồ
+    df_plot = df_sku.tail(horizon_days).copy()
     
     fig = go.Figure()
     
-    # 1. Dải bất định 80% (P10 - P90)
+    # 1. Dải bất định xác suất 80% (P10 - P90)
     fig.add_trace(go.Scatter(
         x=df_plot['Date'], y=df_plot['P90'],
         mode='lines', line=dict(width=0), showlegend=False, hoverinfo='skip'
@@ -397,16 +407,16 @@ with tab1:
         hoverinfo='skip'
     ))
     
-    # 2. Bán hàng thực tế
+    # 2. Doanh số bán ra thực tế
     fig.add_trace(go.Scatter(
         x=df_plot['Date'], y=df_plot['Units Sold'],
         name='Doanh số thực tế bán ra (Actual Sales)',
-        line=dict(color='#0f172a', width=2.2),
+        line=dict(color='#0f172a', width=2.4),
         marker=dict(size=5),
         mode='lines+markers'
     ))
     
-    # 3. Dự báo điểm cũ (Kỳ vọng E[Y])
+    # 3. Dự báo điểm cũ (Kỳ vọng trung bình)
     fig.add_trace(go.Scatter(
         x=df_plot['Date'], y=df_plot['Demand Forecast'],
         name='Dự báo điểm truyền thống cũ (Demand Forecast)',
@@ -414,7 +424,7 @@ with tab1:
         mode='lines'
     ))
     
-    # 4. Ngưỡng đặt hàng tối ưu Q* Newsvendor
+    # 4. Ngưỡng đặt hàng tồn kho tối ưu Q* Newsvendor
     fig.add_trace(go.Scatter(
         x=df_plot['Date'], y=df_plot['Q_star'],
         name=f'Ngưỡng đặt hàng tồn kho tối ưu Q* (q* = {q_star:.1%})',
@@ -422,16 +432,6 @@ with tab1:
         mode='lines'
     ))
     
-    st.markdown(f"""
-    <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:10px; padding:14px 20px; margin-bottom:16px; font-size:0.88rem; color:#1e293b; line-height:1.6;">
-        <b style="color:#0f172a; font-size:0.95rem;">📐 CƠ SỞ GIẢI TÍCH TOÁN HỌC & LƯỢNG HÓA THAM SỐ THỜI GIAN THỰC:</b><br>
-        • Chi phí thiếu hàng cận biên: <code>Cu = p - c + s_loss = {p_price:.1f} - {c_cost:.1f} + {s_loss:.1f} = <b>{Cu:.1f}k VNĐ</b></code><br>
-        • Chi phí thừa hàng cận biên: <code>Co = c - s + h = {c_cost:.1f} - {s_salvage:.1f} + {h_holding:.1f} = <b>{Co:.1f}k VNĐ</b></code><br>
-        • Tỷ số phân vị tới hạn tối ưu: <code>q* = Cu / (Cu + Co) = {Cu:.1f} / ({Cu:.1f} + {Co:.1f}) = <b>{q_star:.3f} ({q_star:.1%})</b></code> ➔ Hệ số an toàn Z = <code><b>{z_qstar:+.2f}</b></code><br>
-        • Ngưỡng đặt hàng điều hành động: <code>Q* = [P50 × (1 + Tăng_trưởng_sale)] + Z(q*) × σ</code>
-    </div>
-    """, unsafe_allow_html=True)
-
     fig.update_layout(
         height=500,
         margin=dict(l=25, r=25, t=65, b=25),
@@ -447,14 +447,14 @@ with tab1:
             borderwidth=1
         ),
         plot_bgcolor='white',
-        xaxis=dict(showgrid=True, gridcolor='#f1f5f9', title="Ngày theo dõi"),
+        xaxis=dict(showgrid=True, gridcolor='#f1f5f9', title="Mốc thời gian vận hành"),
         yaxis=dict(showgrid=True, gridcolor='#f1f5f9', title="Số lượng sản phẩm (Đơn vị)")
     )
     
     st.plotly_chart(fig, use_container_width=True)
     
-    # Bảng kế hoạch tồn kho 14 ngày tới
-    st.markdown("##### 📋 Bảng Số Liệu Kế Hoạch Tồn Kho & Nhập Hàng 14 Ngày Gần Nhất")
+    # Bảng kế hoạch đặt hàng chi tiết 14 ngày tới (Purchase Order Recommendation)
+    st.markdown("##### 📋 Kế Hoạch Đặt Hàng & Lịch Trình Nhập Kho Tác Nghiệp (14 Ngày Tới)")
     df_table = df_plot.tail(14)[['Date', 'Units Sold', 'Demand Forecast', 'P10', 'Q_star', 'P90', 'Holiday/Promotion']].copy()
     df_table['Date'] = df_table['Date'].dt.strftime('%d/%m/%Y')
     df_table['Units Sold'] = df_table['Units Sold'].round(1)
@@ -462,30 +462,33 @@ with tab1:
     df_table['P10'] = df_table['P10'].round(1)
     df_table['P90'] = df_table['P90'].round(1)
     df_table['Q_star'] = df_table['Q_star'].round(1)
-    df_table['Chênh lệch Q* vs Dự báo cũ'] = (df_table['Q_star'] - df_table['Demand Forecast']).round(1)
-    df_table.rename(columns={
+    df_table['Lượng chênh lệch đề xuất'] = (df_table['Q_star'] - df_table['Demand Forecast']).round(1)
+    df_table['Khuyến mãi'] = df_table['Holiday/Promotion'].apply(lambda x: '🔥 Có' if x == 1 else 'Không')
+    
+    df_table_display = df_table[['Date', 'Units Sold', 'Demand Forecast', 'P10', 'Q_star', 'P90', 'Lượng chênh lệch đề xuất', 'Khuyến mãi']].copy()
+    df_table_display.rename(columns={
         'Date': 'Ngày', 'Units Sold': 'Thực tế bán', 'Demand Forecast': 'Dự báo cũ',
         'P10': 'Phân vị P10', 'Q_star': 'Ngưỡng đặt hàng Q* (Mới)', 'P90': 'Phân vị P90',
-        'Holiday/Promotion': 'Khuyến mãi'
+        'Lượng chênh lệch đề xuất': 'Đệm an toàn (Q* - Dự báo cũ)'
     }, inplace=True)
     
-    st.dataframe(df_table, use_container_width=True, hide_index=True)
+    st.dataframe(df_table_display, use_container_width=True, hide_index=True)
     
-    # Nút tải bảng số liệu
-    csv_data = df_table.to_csv(index=False).encode('utf-8-sig')
+    # Nút xuất file CSV lệnh đặt hàng cho phòng Thu mua
+    csv_data = df_table_display.to_csv(index=False).encode('utf-8-sig')
     st.download_button(
-        label="📥 Tải Bảng Kế Hoạch Tồn Kho Này (CSV)",
+        label="📥 Xuất Lệnh Đặt Hàng Kho Vận (CSV File)",
         data=csv_data,
-        file_name=f"ke_hoach_ton_kho_{selected_pid}.csv",
+        file_name=f"purchase_order_{selected_pid}_{selected_store}.csv",
         mime="text/csv"
     )
 
 # ---------------------------------------------------------------------
-# TAB 2: ĐỐI SÁNH TÀI CHÍNH
+# MODULE 2: ĐỐI SÁNH HIỆU QUẢ TÀI CHÍNH & VẬN HÀNH (BACK-TESTING)
 # ---------------------------------------------------------------------
 with tab2:
-    st.subheader("⚖️ Đối Sánh Hiệu Quả Tài Chính: Dự Báo Điểm Cũ vs Mô Hình Newsvendor AI")
-    st.caption("Kiểm định mô phỏng Back-testing trên 90 ngày giao dịch thực tế của SKU đã chọn:")
+    st.subheader("⚖️ Báo Cáo Hiệu Quả Tài Chính: Dự Báo Cũ vs Mô Hình Tối Ưu Tồn Kho Mới")
+    st.caption(f"Kiểm chứng mô phỏng đối soát dữ liệu trên 90 ngày giao dịch gần nhất của SKU {selected_pid}:")
     
     c_m1, c_m2, c_m3 = st.columns(3)
     with c_m1:
@@ -512,7 +515,7 @@ with tab2:
                    marker_color='#2563eb')
         ])
         fig_vol.update_layout(
-            title="Tổng Khối Lượng Sản Phẩm Trong 90 Ngày (Đơn vị)",
+            title="Tổng Khối Lượng Sản Phẩm (Đơn vị trong 90 ngày)",
             barmode='group',
             plot_bgcolor='white',
             margin=dict(l=20, r=20, t=55, b=20),
@@ -537,11 +540,11 @@ with tab2:
         st.plotly_chart(fig_cum, use_container_width=True)
 
 # ---------------------------------------------------------------------
-# TAB 3: KHÁM PHÁ DỮ LIỆU BÁN LẺ KAGGLE
+# MODULE 3: ĐỘNG LỰC THỊ TRƯỜNG & PHÂN TÍCH ĐỘ NHẠY
 # ---------------------------------------------------------------------
 with tab3:
-    st.subheader("🔍 Khám Phá Các Nhân Tố Chi Phối Doanh Số: Khuyến Mãi & Thời Tiết")
-    st.caption("Dữ liệu thực nghiệm 73.100 dòng từ Kaggle Retail Store Inventory Dataset:")
+    st.subheader("🔍 Động Lực Nhu Cầu & Phân Tích Độ Nhạy Tham Số Kinh Doanh")
+    st.caption("Lượng hóa mức độ tác động của các nhân tố ngoại sinh và chi phí lên chiến lược đặt hàng:")
     
     col_d1, col_d2 = st.columns(2)
     with col_d1:
@@ -553,9 +556,9 @@ with tab3:
             text=promo_stats['mean'].round(1),
             textposition='auto'
         ))
-        fig_p.update_layout(title="Doanh Số Trung Bình: Ngày Thường vs Ngày Khuyến Mãi", plot_bgcolor='white', yaxis_title="Sản lượng bán (Đơn vị/Ngày)")
+        fig_p.update_layout(title="Sản Lượng Bán Trung Bình: Ngày Thường vs Khuyến Mãi", plot_bgcolor='white', yaxis_title="Sản lượng bán (Đơn vị/Ngày)")
         st.plotly_chart(fig_p, use_container_width=True)
-        st.caption("➔ **Kết luận thực nghiệm:** Khuyến mãi làm tăng trung bình **+36.3%** lượng bán ra. Nếu dùng dự báo điểm cũ sẽ bị đứt hàng trầm trọng!")
+        st.caption("➔ **Đánh giá tác động:** Khuyến mãi kích cầu tăng trung bình **+36.3%** lượng bán ra. Hệ thống cần tự động nâng tồn kho đệm để đón đầu.")
         
     with col_d2:
         weather_stats = df_raw.groupby('Weather Condition')['Units Sold'].agg(['mean', 'median', 'std']).reset_index().sort_values('mean', ascending=False)
@@ -566,45 +569,104 @@ with tab3:
             text=weather_stats['mean'].round(1),
             textposition='auto'
         ))
-        fig_w.update_layout(title="Doanh Số Trung Bình Theo Điều Kiện Thời Tiết", plot_bgcolor='white', yaxis_title="Sản lượng bán (Đơn vị/Ngày)")
+        fig_w.update_layout(title="Sản Lượng Bán Trung Bình Theo Điều Kiện Thời Tiết", plot_bgcolor='white', yaxis_title="Sản lượng bán (Đơn vị/Ngày)")
         st.plotly_chart(fig_w, use_container_width=True)
-        st.caption("➔ **Kết luận thực nghiệm:** Thời tiết nắng đẹp (Sunny) kích cầu mua sắm tại cửa hàng tốt hơn ngày mưa bão (Rainy).")
+        st.caption("➔ **Đánh giá tác động:** Điều kiện thời tiết nắng ráo (Sunny) thúc đẩy khách ghé cửa hàng trực tiếp cao hơn ngày mưa.")
+
+    st.markdown("---")
+    st.markdown("##### 🔬 Ma Trận Phân Tích Độ Nhạy: Biến Động Chi Phí Lưu Kho (h) vs Tỷ Số Phân Vị (q*)")
+    
+    h_test_range = np.linspace(1.0, 20.0, 10)
+    q_test_vals = [Cu / (Cu + (c_cost - s_salvage + h_val)) for h_val in h_test_range]
+    
+    fig_sens = go.Figure()
+    fig_sens.add_trace(go.Scatter(
+        x=h_test_range, y=q_test_vals,
+        mode='lines+markers', line=dict(color='#2563eb', width=2.5),
+        marker=dict(size=7, color='#1e40af'),
+        name='Phân vị tới hạn q*'
+    ))
+    fig_sens.add_vline(x=h_holding, line_dash="dash", line_color="#dc2626", annotation_text=f"Mức hiện tại: h={h_holding}k", annotation_position="top right")
+    fig_sens.update_layout(
+        title="Độ Nhạy Của Phân Vị Tối Ưu (q*) Khi Chi Phí Lưu Kho (h) Tăng",
+        xaxis_title="Chi phí lưu kho trên 1 đơn vị hàng: h (nghìn VNĐ)",
+        yaxis_title="Tỷ số phân vị tới hạn tối ưu (q*)",
+        plot_bgcolor='white',
+        margin=dict(l=20, r=20, t=50, b=20)
+    )
+    st.plotly_chart(fig_sens, use_container_width=True)
+    st.caption("➔ **Nguyên tắc quản trị:** Khi chi phí lưu kho $h$ tăng vọt, hệ thống tự động kéo giảm phân vị an toàn $q^*$ để tránh rủi ro chôn vốn lưu động.")
 
 # ---------------------------------------------------------------------
-# TAB 4: ĐỀ CƯƠNG TIỂU LUẬN & THUYẾT TRÌNH
+# MODULE 4: QUẢN TRỊ DANH MỤC & SỨC KHỎE TỒN KHO ĐA SKU (PORTFOLIO)
 # ---------------------------------------------------------------------
 with tab4:
-    st.subheader("📑 Báo Cáo Tóm Tắt Tiểu Luận Nghiên Cứu Khoa Học")
-    st.caption("Cấu trúc chuẩn mực theo yêu cầu của Thầy TS. Trần Duy Thanh:")
+    st.subheader(f"📋 Bảng Điều Hành Sức Khỏe Danh Mục SKU Trong Ngành Hàng: {selected_cat}")
+    st.caption("Tổng quan phân bổ chiến lược và mức tồn kho an toàn cho toàn bộ sản phẩm cùng ngành:")
     
-    st.markdown(r"""
-    #### 1. Tổng quan tình hình nghiên cứu & Luận giải sự cần thiết
-    * **Thách thức kinh doanh:** Quản trị bán lẻ là bài toán đánh đổi liên tục giữa **Doanh số** (sợ mất khách vì đứt hàng) và **Hàng tồn kho** (sợ ứ đọng vốn và chi phí hủy hàng).
-    * **Hạn chế của dự báo điểm:** Các mô hình truyền thống (ARIMA, Hồi quy) chỉ đưa ra kỳ vọng trung bình $\hat{y}$, hoàn toàn che giấu rủi ro bất định và phạt sai số đối xứng, trong khi thực tế chi phí thiếu hàng ($C_u$) và chi phí thừa hàng ($C_o$) luôn bất đối xứng.
-    * **Giải pháp đề xuất:** Ứng dụng mô hình **Dự báo xác suất (Quantile Loss)** kết hợp **Lý thuyết Tối ưu hóa Newsvendor**.
+    # Tổng hợp số liệu các SKU trong danh mục
+    df_cat_summary = []
+    for pid in product_list:
+        sub_df = df_cat[df_cat['Product ID'] == pid]
+        mean_sales = sub_df['Units Sold'].mean()
+        std_sales = sub_df['Units Sold'].std()
+        
+        # Giả lập biên lãi theo từng SKU
+        p_val = p_price
+        c_val = c_cost * (0.85 + (int(pid[-2:]) % 4) * 0.1)
+        cu_val = p_val - c_val + s_loss
+        co_val = c_val - s_salvage + h_holding
+        q_val = cu_val / (cu_val + co_val) if (cu_val + co_val) > 0 else 0.5
+        z_val = norm.ppf(np.clip(q_val, 0.001, 0.999))
+        q_star_sku = max(0, mean_sales + z_val * (std_sales if not pd.isna(std_sales) else 5.0))
+        
+        strat = "Tấn công (Bảo vệ doanh số)" if q_val >= 0.7 else ("Phòng thủ (Chống tồn đọng)" if q_val <= 0.4 else "Cân bằng chi phí")
+        
+        df_cat_summary.append({
+            'Mã SKU': pid,
+            'Doanh số TB/Ngày': round(mean_sales, 1),
+            'Độ biến động (Std)': round(std_sales, 1) if not pd.isna(std_sales) else 0.0,
+            'Giá vốn giả định (k)': round(c_val, 1),
+            'Phân vị tới hạn q*': f"{q_val:.1%}",
+            'Mức tồn tối ưu Q*': round(q_star_sku, 1),
+            'Định hướng chiến lược': strat
+        })
     
-    #### 2. Nội dung nghiên cứu
-    * Dự báo toàn bộ phân phối xác suất nhu cầu ($P_{10} - P_{50} - P_{90}$).
-    * Tích hợp tỷ số tới hạn kinh tế $q^* = \frac{C_u}{C_u + C_o}$ để xác định chính xác mức đặt hàng tồn kho tối ưu $Q^*$.
+    df_portfolio = pd.DataFrame(df_cat_summary)
+    st.dataframe(df_portfolio, use_container_width=True, hide_index=True)
     
-    #### 3. Phương pháp nghiên cứu & Cơ sở toán học
-    * **Hàm tổn thất phân vị (Pinball Loss):** $L_q(y, \hat{y}) = \max(q(y - \hat{y}), (q-1)(y - \hat{y}))$.
-    * **Công thức chi phí cận biên:**
-      * Chi phí thiếu hàng: $C_u = p - c + s_{loss}$
-      * Chi phí thừa hàng: $C_o = c - s + h$
-    * **Ngưỡng đặt hàng tối ưu:** $Q^* = \mu + z(q^*) \cdot \sigma$.
-    * **Phát triển ứng dụng Web Streamlit:** Cho phép người dùng tự do nhập/kéo số liệu để quan sát sự dịch chuyển của đường $Q^*$ thời gian thực.
-    
-    #### 4. Kết quả nghiên cứu & Thực nghiệm
-    * Trên 73.100 bản ghi dữ liệu Kaggle: Tăng trưởng lợi nhuận **+16.6%**, cắt giảm **-66.3%** số ngày đứt hàng, đưa tỷ lệ phục vụ SLA đạt **95.9%**.
-    """)
+    # Biểu đồ bong bóng ma trận SKU: Doanh số TB vs Mức tồn tối ưu Q*
+    fig_matrix = go.Figure()
+    for strat, color in zip(["Tấn công (Bảo vệ doanh số)", "Cân bằng chi phí", "Phòng thủ (Chống tồn đọng)"], ['#16a34a', '#fbbf24', '#dc2626']):
+        sub_p = df_portfolio[df_portfolio['Định hướng chiến lược'] == strat]
+        if not sub_p.empty:
+            fig_matrix.add_trace(go.Scatter(
+                x=sub_p['Doanh số TB/Ngày'],
+                y=sub_p['Mức tồn tối ưu Q*'],
+                mode='markers+text',
+                text=sub_p['Mã SKU'],
+                textposition='top center',
+                name=strat,
+                marker=dict(size=12, color=color)
+            ))
+            
+    fig_matrix.update_layout(
+        title="Ma Trận Danh Mục Sản Phẩm (Doanh Số Trung Bình vs Ngưỡng Tồn Kho Q*)",
+        xaxis_title="Doanh số trung bình (Đơn vị/Ngày)",
+        yaxis_title="Ngưỡng đặt hàng tồn kho tối ưu Q*",
+        plot_bgcolor='white',
+        margin=dict(l=25, r=25, t=55, b=25),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5)
+    )
+    st.plotly_chart(fig_matrix, use_container_width=True)
 
-# FOOTER
+# =====================================================================
+# 8. FOOTER DOANH NGHIỆP CHUYÊN NGHIỆP
+# =====================================================================
 st.markdown("---")
 st.markdown("""
 <div style="text-align:center; color:#64748b; font-size:0.85rem; line-height:1.6;">
-    Tiểu Luận Nghiên Cứu Môn Học: <b>Các mô hình dự báo trong Kinh doanh</b> | GVHD: <b>TS. Trần Duy Thanh</b><br>
-    Nhóm học viên thực hiện: <b>Lâm Thanh Hiền (Trưởng nhóm - C25611257), Đỗ Thị Kim Anh (C25611255), Lưu Thị Huỳnh Như (C25611263), Đào Thị Hồng Vân (C25611268)</b><br>
-    Nguồn dữ liệu thực nghiệm: <b>Kaggle Retail Store Inventory Dataset (73.100 bản ghi)</b>
+    <b>Hệ Thống Ra Quyết Định Chuỗi Cung Ứng & Quản Trị Hàng Tồn Kho Thông Minh</b><br>
+    Nền tảng Tích Hợp Dự Báo Xác Suất Đa Phân Vị & Lý Thuyết Tối Ưu Hóa Newsvendor | Enterprise Production Edition
 </div>
 """, unsafe_allow_html=True)
